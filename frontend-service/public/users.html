@@ -15,23 +15,17 @@
 
   <main>
     <h2>User List</h2>
-    <table>
+    <table id="usersTable">
       <thead>
-        <tr>
-          <th>ID</th>
-          <th>Name</th>
-          <th>Email</th>
-        </tr>
+          <tr>
+              <th>ID</th>
+              <th>Username</th>
+          </tr>
       </thead>
-      <tbody>
-        <!-- Placeholder for dynamic user data -->
-        <tr>
-          <td>1</td>
-          <td>John Doe</td>
-          <td>john.doe@example.com</td>
-        </tr>
+      <tbody id="usersTable">
+          <!-- Dynamic user data will be appended here -->
       </tbody>
-    </table>
+  </table>
   </main>
 
   <!-- Include Footer -->
@@ -39,4 +33,5 @@
     <p>© 2024 AFAS. All rights reserved.</p>
   </footer>
 </body>
+<script src="./js/users.js"></script>
 </html>

@@ -1,13 +1,22 @@
 import express from 'express';
 import dotenv from 'dotenv';
-import authRoutes from './routes/authRoutes.js';
-import db from './config/db.js';
+import authRoutes from './routes/auth.route.js';
+import db from './config/db.config.js';
+import cors from 'cors';
 
 
 dotenv.config();
 
 const app = express();
 app.use(express.json());
+
+// Add CORS middleware
+app.use(cors({
+    origin: 'http://localhost:3000', // Allow requests from frontend-service
+    methods: ['GET', 'POST', 'PUT', 'DELETE'], // Allowed HTTP methods
+    allowedHeaders: ['Content-Type', 'Authorization'], // Allowed headers
+}));
+
 
 
 //connect to db

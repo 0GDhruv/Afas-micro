@@ -11,6 +11,13 @@
   <header>
     <img src="/images/logo.png" alt="AFAS Logo" class="logo">
     <h1>Dashboard</h1>
+    <button id="logoutButton">Logout</button>
+    <script>
+        document.getElementById('logoutButton').addEventListener('click', () => {
+            localStorage.removeItem('token'); // Remove token
+            window.location.href = '/'; // Redirect to login
+        });
+    </script>
   </header>
 
   <main>

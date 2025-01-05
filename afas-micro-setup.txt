@@ -1,0 +1,19 @@
+npm init -y
+npm install express bcrypt jsonwebtoken dotenv mysql2 body-parser cors http-proxy-middleware sequelize
+npm install -g pm2
+npm install --save-dev nodemon
+
+
+
+
+cd /path/to/gateway-service
+pm2 start app.js --name gateway-service
+
+cd /path/to/auth-service
+pm2 start app.js --name auth-service
+
+cd /path/to/user-service
+pm2 start app.js --name user-service
+
+cd /path/to/frontend-service
+pm2 start app.js --name frontend-service

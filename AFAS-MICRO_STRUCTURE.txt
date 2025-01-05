@@ -1,0 +1,69 @@
+AFAS-MICRO/
+│
+├── auth-service/
+│	├── config/
+│   │   └── db.config.js
+│   ├── controllers/
+│   │   └── auth.controller.js
+│   ├── models/
+│   │   └── user.model.js
+│   ├── routes/
+│   │   └── auth.route.js
+│   ├── middleware/
+│   │   └── auth.middleware.js
+│   ├── utils/
+│   │   └── jwt.utils.js
+│   └── app.js
+│	├── .env
+│	├── app.js
+│	├── package.json
+│	└── package-lock.json
+├── gateway-service/
+│	├── config/
+│   │   └── dotenv.config.js
+│   ├── routes/
+│   ├── middleware/
+│   └── app.js
+│	├── .env
+│	├── app.js
+│	├── package.json
+│	└── package-lock.json
+├── user-service/
+│	├── config/
+│   │   └── db.config.js
+│   ├── controllers/
+│   │   └── users.controller.js
+│   ├── models/
+│   │   └── user.model.js
+│   ├── routes/
+│   │   └── auth.route.js
+│   ├── middleware/
+│   │   └── role.middleware.js
+│   ├── utils/
+│   └── app.js
+│	├── .env
+│	├── app.js
+│	├── package.json
+│	└── package-lock.json
+├── frontend-service/
+│	├── routes/
+│   │   └── frontend.route.js
+│	├── public/
+│   │   └── css/
+│	│   │   └── styles.css
+│	│   ├── js/
+│	│   │   └── users.js
+│	│   │   └── dashboard.js
+│	│   │   └── login.js
+│	│   │   └── scripts.js
+│	│   ├── images/
+│	│   │   └── logo.png
+│	│	├── dashboard.html
+│	│	├── index.html
+│	│	├── login.html
+│	│	└── users.html
+│	├── app.js
+│	├── .env
+│	├── readme.md
+│	└── package.json
+└── ..........
