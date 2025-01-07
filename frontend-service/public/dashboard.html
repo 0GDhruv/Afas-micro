@@ -1,33 +1,69 @@
+<!-- public/dashboard.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="/css/styles.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>AFAS - Dashboard</title>
+  <link rel="stylesheet" href="/css/styles.css" />
 </head>
 <body>
-  <!-- Include Header -->
-  <header>
-    <img src="/images/logo.png" alt="AFAS Logo" class="logo">
-    <h1>Dashboard</h1>
-    <button id="logoutButton">Logout</button>
-    <script>
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <h2>Welcome to AFAS</h2>
+    <ul>
+      <li><a href="/dashboard" class="active">Dashboard</a></li>
+      <li><a href="#">Audio Type</a></li>
+      <li><a href="#">Upload Audio</a></li>
+      <li><a href="#">Announcement Type</a></li>
+      <li><a href="#">Sequence</a></li>
+      <li><a href="#">Scheduler</a></li>
+      <li><a href="#">Zones</a></li>
+      <li><a href="#">Zone Selector</a></li>
+      <li><a href="/users">Users</a></li>
+      <li><a href="#">Permissions</a></li>
+    </ul>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="main-content">
+    <header class="main-header">
+      <h1>Dashboard</h1>
+      <button id="logoutButton">Logout</button>
+      <script>
         document.getElementById('logoutButton').addEventListener('click', () => {
-            localStorage.removeItem('token'); // Remove token
-            window.location.href = '/'; // Redirect to login
+          localStorage.removeItem('token');
+          window.location.href = '/';
         });
-    </script>
-  </header>
+      </script>
+    </header>
 
-  <main>
-    <h2>Welcome to the Dashboard</h2>
-    <p>This is the main area for managing the system.</p>
-  </main>
+    <div class="table-container">
+      <h2>Active Announcements</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Announcement</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Example placeholders. Load from your own data if needed. -->
+          <tr><td>1.</td><td>Announcement #1</td></tr>
+          <tr><td>2.</td><td>Announcement #2</td></tr>
+          <tr><td>3.</td><td>Announcement #3</td></tr>
+          <tr><td>4.</td><td>Announcement #4</td></tr>
+          <tr><td>5.</td><td>Announcement #5</td></tr>
+        </tbody>
+      </table>
+      <!-- Pagination if necessary -->
+      <div class="pagination">
+        <button disabled>&lt; Page 1 &gt;</button>
+      </div>
+    </div>
+  </div>
 
-  <!-- Include Footer -->
-  <footer>
-    <p>© 2024 AFAS. All rights reserved.</p>
-  </footer>
+  <!-- Add your JS for dashboard logic if needed. -->
+  <script src="/js/dashboard.js"></script>
 </body>
 </html>

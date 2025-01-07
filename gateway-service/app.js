@@ -7,38 +7,43 @@ dotenv.config();
 
 const app = express();
 
-// Add CORS middleware
-app.use(cors({
-    origin: 'http://localhost:3000', // Allow requests from frontend-service
-    methods: ['GET', 'POST', 'PUT', 'DELETE'], // Allowed HTTP methods
-    allowedHeaders: ['Content-Type', 'Authorization'], // Allowed headers
-}));
+// Enable CORS
+app.use(
+  cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);
 
-
-
-//Middleware for routing requests to auth-service
-app.use('/auth', createProxyMiddleware({
+// /auth → Auth-service
+app.use(
+  '/auth',
+  createProxyMiddleware({
     target: process.env.AUTH_SERVICE_URL,
     changeOrigin: true,
-})
+  })
 );
 
-//Middleware for routing requests to user-service
-app.use('/user', createProxyMiddleware({
+// /user → User-service
+app.use(
+  '/user',
+  createProxyMiddleware({
     target: process.env.USER_SERVICE_URL,
     changeOrigin: true,
-
-})
+  })
 );
 
-//Middleware for routing requests to frontend-service
-app.use('/', createProxyMiddleware({
+// everything else → Frontend-service
+app.use(
+  '/',
+  createProxyMiddleware({
     target: process.env.FRONTEND_SERVICE_URL,
     changeOrigin: true,
-})
+  })
 );
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Gateway service is running on port ${PORT}`);
+  console.log(`Gateway service running on port ${PORT}`);
 });
