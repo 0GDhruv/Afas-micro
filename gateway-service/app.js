@@ -1,49 +1,37 @@
-import express from 'express';
-import { createProxyMiddleware } from 'http-proxy-middleware';
-import dotenv from 'dotenv';
-import cors from 'cors';
+// app.js
+import express from "express";
+import { createProxyMiddleware } from "http-proxy-middleware";
+import dotenv from "dotenv";
 
 dotenv.config();
 
 const app = express();
 
-// Enable CORS
+// Proxy routes
 app.use(
-  cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  })
-);
-
-// /auth → Auth-service
-app.use(
-  '/auth',
+  "/auth",
   createProxyMiddleware({
     target: process.env.AUTH_SERVICE_URL,
     changeOrigin: true,
   })
 );
 
-// /user → User-service
 app.use(
-  '/user',
+  "/users",
   createProxyMiddleware({
-    target: process.env.USER_SERVICE_URL,
+    target: process.env.USERS_SERVICE_URL,
     changeOrigin: true,
   })
 );
 
-// everything else → Frontend-service
 app.use(
-  '/',
+  "/",
   createProxyMiddleware({
     target: process.env.FRONTEND_SERVICE_URL,
     changeOrigin: true,
   })
 );
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Gateway service running on port ${PORT}`);
+app.listen(process.env.PORT, () => {
+  console.log(`Gateway Service running on port ${process.env.PORT}`);
 });

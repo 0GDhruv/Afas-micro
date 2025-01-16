@@ -1,5 +1,5 @@
 npm init -y
-npm install express bcrypt jsonwebtoken dotenv mysql2 body-parser cors http-proxy-middleware sequelize path
+npm install express bcrypt jsonwebtoken dotenv mysql2 body-parser cors http-proxy-middleware sequelize path multer
 npm install -g pm2
 npm install --save-dev nodemon
 

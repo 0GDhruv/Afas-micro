@@ -1,19 +1,21 @@
 import express from 'express';
 import dotenv from 'dotenv';
-import cors from 'cors';
-import userRoutes from './routes/users.route.js';
+import userRoutes from './routes/user.route.js';
 import db from './config/db.config.js';
+// import cors from 'cors';
 
 dotenv.config();
 const app = express();
 app.use(express.json());
+
+
 // Enable CORS
-app.use(
-    cors({
-      origin: '*',
-      methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    })
-  );
+// app.use(
+//     cors({
+//       origin: '*',
+//       methods: ['GET', 'POST', 'PUT', 'DELETE'],
+//     })
+//   );
 
 // Connect DB
 db.authenticate()

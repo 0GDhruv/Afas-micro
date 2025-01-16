@@ -4,93 +4,52 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AFAS - Users</title>
   <link rel="stylesheet" href="/css/styles.css" />
+  <title>AFAS Users</title>
 </head>
 <body>
-  <!-- SIDEBAR -->
   <div class="sidebar">
-    <h2>Welcome to AFAS</h2>
     <ul>
       <li><a href="/dashboard">Dashboard</a></li>
-      <li><a href="#">Audio Type</a></li>
-      <li><a href="#">Upload Audio</a></li>
-      <li><a href="#">Announcement Type</a></li>
-      <li><a href="#">Sequence</a></li>
-      <li><a href="#">Scheduler</a></li>
-      <li><a href="#">Zones</a></li>
-      <li><a href="#">Zone Selector</a></li>
       <li><a href="/users" class="active">Users</a></li>
-      <li><a href="#">Permissions</a></li>
     </ul>
   </div>
-
-  <!-- MAIN CONTENT -->
   <div class="main-content">
-    <header class="main-header">
+    <header>
       <h1>Users</h1>
       <button id="logoutButton">Logout</button>
-      <script>
-        document.getElementById('logoutButton').addEventListener('click', () => {
-          localStorage.removeItem('token');
-          window.location.href = '/';
-        });
-      </script>
     </header>
-
-    <!-- CREATE NEW USER FORM -->
-    <div class="form-container">
+    <section>
       <h2>Create New User</h2>
       <form id="user-form">
-        <div class="form-group">
-          <label for="username">User Name *</label>
-          <input type="text" name="username" id="username" required />
-        </div>
-        <div class="form-group">
-          <label for="password">Password *</label>
-          <input type="password" name="password" id="password" required />
-        </div>
-        <div class="form-group">
-          <label for="access">Access *</label>
-          <!-- Multi-select dropdown: hold CTRL (Windows) or CMD (Mac) to select multiple. -->
-          <select name="access" id="access-dropdown" multiple required>
-            <!-- Options loaded dynamically by users.js or pre-filled. Example: -->
-            <!-- <option value="Dashboard">Dashboard</option>
-            <option value="Audio Type">Audio Type</option>
-            <option value="Upload Audio">Upload Audio</option>
-            etc... -->
-          </select>
-        </div>
-        <button type="submit" class="submit-btn">Submit</button>
+        <label for="username">Username:</label>
+        <input type="text" id="username" required />
+        <label for="password">Password:</label>
+        <input type="password" id="password" required />
+        <label for="access">Access:</label>
+        <select id="access" multiple>
+          <option value="Dashboard">Dashboard</option>
+          <option value="Users">Users</option>
+          <!-- Add more options -->
+        </select>
+        <button type="submit">Submit</button>
       </form>
-    </div>
-
-    <!-- TABLE SECTION -->
-    <div class="table-container">
-      <div class="search-box">
-        <label for="search-input">Search:</label>
-        <input type="text" id="search-input" placeholder="Search username..." />
-      </div>
+    </section>
+    <section>
+      <h2>User List</h2>
+      <input type="text" id="search" placeholder="Search users..." />
       <table>
         <thead>
           <tr>
-            <th>SR. NO.</th>
-            <th>User Name</th>
+            <th>Username</th>
             <th>Access</th>
-            <th>Action</th>
+            <th>Actions</th>
           </tr>
         </thead>
-        <tbody id="user-table-body">
-          <!-- Populated dynamically from users.js -->
-        </tbody>
+        <tbody id="user-table"></tbody>
       </table>
-      <div id="pagination" class="pagination">
-        <!-- Populated dynamically from users.js -->
-      </div>
-    </div>
+    </section>
   </div>
-
-  <!-- JS script that handles user fetching, search, etc. -->
   <script src="/js/users.js"></script>
 </body>
 </html>

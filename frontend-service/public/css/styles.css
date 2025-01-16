@@ -1,48 +1,43 @@
+/* public/css/styles.css */
 body {
   font-family: Arial, sans-serif;
   margin: 0;
   padding: 0;
-}
-header {
-  background-color: #333;
+  background-color: #111;
   color: white;
-  text-align: center;
-  padding: 1rem 0;
 }
-header .logo {
-  width: 50px;
-  display: block;
-  margin: 0 auto 1rem;
+
+.sidebar {
+  width: 200px;
+  background-color: #222;
+  float: left;
+  height: 100vh;
+  padding: 20px;
 }
-main {
-  padding: 2rem;
-  text-align: center;
+
+.sidebar ul {
+  list-style: none;
+  padding: 0;
 }
-footer {
-  background-color: #333;
-  color: white;
-  text-align: center;
-  padding: 1rem 0;
-  position: fixed;
-  width: 100%;
-  bottom: 0;
-}
-table {
-  margin: 2rem auto;
-  border-collapse: collapse;
-  width: 80%;
-}
-th, td {
-  border: 1px solid #ddd;
-  padding: 0.5rem;
-}
-th {
-  background-color: #f4f4f4;
-}
-a {
-  color: #007bff;
+
+.sidebar li a {
   text-decoration: none;
+  color: white;
+  display: block;
+  margin: 10px 0;
 }
-a:hover {
-  text-decoration: underline;
+
+.sidebar li a.active {
+  font-weight: bold;
+}
+
+.main-content {
+  margin-left: 220px;
+  padding: 20px;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }

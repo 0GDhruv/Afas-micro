@@ -15,11 +15,11 @@ const User = db.define(
       allowNull: false
     },
     // If you want to store "access" as JSON in the DB
-    access: {
-      type: DataTypes.TEXT, // or DataTypes.JSON in some dialects
-      allowNull: true,
-      defaultValue: '[]' // or null
-    }
+    // access: {
+    //   type: DataTypes.TEXT, // or DataTypes.JSON in some dialects
+    //   allowNull: true,
+    //   defaultValue: '[]' // or null
+    // }
   },
   {
     tableName: 'users', // so it matches your existing table

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Upload Audio</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <!-- Top Bar -->
+  <header class="top-bar">
+    <h1>Welcome to AFAS</h1>
+    <button id="logout-button">Logout</button>
+  </header>
+
+  <!-- Side Navigation Bar -->
+  <nav class="side-nav">
+    <ul>
+      <li><a href="/dashboard">Dashboard</a></li>
+      <li><a href="/audio-type">Audio Type</a></li>
+      <li><a href="/upload" class="active">Upload Audio</a></li>
+      <li><a href="/announcement-type">Announcement Type</a></li>
+      <li><a href="/sequence">Sequence</a></li>
+      <li><a href="/scheduler">Scheduler</a></li>
+      <li><a href="/zones">Zones</a></li>
+      <li><a href="/zone-selector">Zone Selector</a></li>
+      <li><a href="/users">Users</a></li>
+      <li><a href="/permissions">Permissions</a></li>
+    </ul>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <h2>Upload Audio</h2>
+
+    <!-- Language Tabs -->
+    <div class="language-tabs">
+      <button class="language-tab active" data-lang="english">English</button>
+      <button class="language-tab" data-lang="hindi">Hindi</button>
+      <button class="language-tab" data-lang="regional">Regional</button>
+    </div>
+
+    <!-- Upload Form -->
+    <form id="upload-form" enctype="multipart/form-data">
+      <label for="audioType">Audio Type *</label>
+      <select id="audioType" required>
+        <option value="specialmessage">Special Message</option>
+        <option value="std">Standard</option>
+        <option value="number">Number</option>
+        <option value="city">City</option>
+        <option value="airline">Airline</option>
+      </select>
+
+      <label for="audioFile">Upload Audio *</label>
+      <input type="file" id="audioFile" accept=".mp3,.wav" required>
+
+      <label for="transcription">Transcription *</label>
+      <textarea id="transcription" required></textarea>
+
+      <label for="remarks">Remarks</label>
+      <input type="text" id="remarks">
+
+      <button type="submit">Submit</button>
+    </form>
+
+    <!-- Uploaded Audios Table -->
+    <h2>Uploaded Audios</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>SR. NO.</th>
+          <th>Audio</th>
+          <th>Transcription</th>
+          <th>Remarks</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="audio-table"></tbody>
+    </table>
+
+    <!-- Pagination -->
+    <div class="pagination">
+      <button id="prev-page" disabled>&lt; Prev</button>
+      <span id="page-info">Page 1</span>
+      <button id="next-page">Next &gt;</button>
+    </div>
+  </main>
+
+  <script src="js/upload.js"></script>
+</body>
+</html>

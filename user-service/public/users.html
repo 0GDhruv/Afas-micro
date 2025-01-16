@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Users Management</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <div class="sidebar">
+    <ul>
+      <li><a href="/dashboard">Dashboard</a></li>
+      <li><a href="/users" class="active">Users</a></li>
+    </ul>
+  </div>
+  <div class="main-content">
+    <header>
+      <h1>Manage Users</h1>
+    </header>
+    <section>
+      <form id="user-form">
+        <label for="username">Username:</label>
+        <input type="text" id="username" required>
+        <label for="password">Password:</label>
+        <input type="password" id="password" required>
+        <label for="access">Access:</label>
+        <select id="access" multiple>
+          <option value="Dashboard">Dashboard</option>
+          <option value="Users">Users</option>
+        </select>
+        <button type="submit">Submit</button>
+      </form>
+    </section>
+    <section>
+      <h2>User List</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Access</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="user-table"></tbody>
+      </table>
+    </section>
+    <script src="/js/users.js"></script>
+  </div>
+</body>
+</html>
