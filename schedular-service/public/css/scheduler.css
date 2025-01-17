@@ -1,0 +1,65 @@
+/* General Layout */
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+  }
+  
+  .top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #333;
+    color: white;
+    padding: 10px 20px;
+  }
+  
+  .side-nav {
+    position: fixed;
+    top: 50px;
+    left: 0;
+    background-color: #444;
+    width: 200px;
+    height: 100%;
+    color: white;
+  }
+  
+  .side-nav ul {
+    list-style: none;
+    padding: 0;
+  }
+  
+  .side-nav ul li {
+    padding: 10px 20px;
+  }
+  
+  .side-nav ul li a {
+    color: white;
+    text-decoration: none;
+  }
+  
+  .side-nav ul li a.active {
+    background-color: #555;
+  }
+  
+  .main-content {
+    margin-left: 220px;
+    padding: 20px;
+  }
+  
+  /* Form Styling */
+  form {
+    margin-bottom: 20px;
+  }
+  
+  form label {
+    display: block;
+    margin: 10px 0 5px;
+  }
+  
+  form input, form select, form button {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+    padding: 8px;
+  }
+  

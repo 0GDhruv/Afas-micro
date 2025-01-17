@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scheduler</title>
+  <link rel="stylesheet" href="css/scheduler.css">
+</head>
+<body>
+  <header class="top-bar">
+    <h1>Welcome to AFAS</h1>
+    <button id="logout-button">Logout</button>
+  </header>
+
+  <nav class="side-nav">
+    <ul>
+      <li><a href="/dashboard">Dashboard</a></li>
+      <li><a href="/upload">Upload Audio</a></li>
+      <li><a href="/scheduler" class="active">Scheduler</a></li>
+    </ul>
+  </nav>
+
+  <main class="main-content">
+    <h2>Scheduler</h2>
+    <form id="scheduler-form">
+      <label for="language">Language:</label>
+      <select id="language" required></select>
+
+      <label for="audio">Announcement:</label>
+      <select id="audio" required></select>
+
+      <label for="timing">Timing:</label>
+      <div id="timing-container">
+        <input type="time" class="timing-field" required>
+        <button type="button" id="add-timing">+</button>
+      </div>
+
+      <label for="start-date">From:</label>
+      <input type="date" id="start-date" required>
+
+      <label for="end-date">To:</label>
+      <input type="date" id="end-date" required>
+
+      <label for="frequency">Frequency:</label>
+      <select id="frequency" multiple>
+        <option value="all">Select All</option>
+        <option value="Mon">Monday</option>
+        <option value="Tue">Tuesday</option>
+        <option value="Wed">Wednesday</option>
+        <option value="Thu">Thursday</option>
+        <option value="Fri">Friday</option>
+        <option value="Sat">Saturday</option>
+        <option value="Sun">Sunday</option>
+      </select>
+
+      <button type="submit">Save Schedule</button>
+    </form>
+
+    <h2>Schedules</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Sr. No.</th>
+          <th>Announcement</th>
+          <th>Timing</th>
+          <th>From - To</th>
+          <th>Frequency</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="schedule-table"></tbody>
+    </table>
+  </main>
+
+  <script src="js/scheduler.js"></script>
+</body>
+</html>
