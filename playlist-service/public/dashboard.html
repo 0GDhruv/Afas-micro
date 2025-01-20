@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <header class="top-bar">
+    <h1>Welcome to AFAS</h1>
+    <button id="logout-button">Logout</button>
+  </header>
+
+  <nav class="side-nav">
+    <ul>
+      <li><a href="/" class="active">Dashboard</a></li>
+      <li><a href="/upload">Upload Audio</a></li>
+      <li><a href="/scheduler">Scheduler</a></li>
+    </ul>
+  </nav>
+
+  <main class="main-content">
+    <h2>Active Announcements</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Sr. No.</th>
+          <th>Name</th>
+          <th>Time</th>
+          <th>Sequence</th>
+        </tr>
+      </thead>
+      <tbody id="active-announcements">
+        <!-- Active announcements will be dynamically populated here -->
+      </tbody>
+    </table>
+  </main>
+
+  <script src="/js/dashboard.js"></script>
+</body>
+</html>

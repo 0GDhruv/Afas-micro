@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Script Manager</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header>
+    <h1>Welcome to AFAS</h1>
+    <button id="logout-button">Logout</button>
+  </header>
+
+  <nav>
+    <ul>
+      <li><a href="/">Dashboard</a></li>
+      <li><a href="/scriptmanager" class="active">Script Manager</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h2>Script Manager</h2>
+    <div>
+      <label for="language">Language:</label>
+      <select id="language"></select>
+
+      <label for="announcementType">Announcement Type:</label>
+      <select id="announcementType"></select>
+
+      <label for="scriptName">Script Name:</label>
+      <input type="text" id="scriptName">
+
+      <label for="sequence">Sequence:</label>
+      <textarea id="sequence"></textarea>
+
+      <button id="addScriptButton">Add Script</button>
+    </div>
+
+    <h3>Scripts</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Sr. No.</th>
+          <th>Script Name</th>
+          <th>Language</th>
+          <th>Announcement Type</th>
+          <th>Sequence</th>
+        </tr>
+      </thead>
+      <tbody id="scriptsTable"></tbody>
+    </table>
+  </main>
+
+  <script src="js/scriptmanager.js"></script>
+</body>
+</html>

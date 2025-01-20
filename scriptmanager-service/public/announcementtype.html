@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Announcement Types</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header>
+    <h1>Announcement Types</h1>
+  </header>
+  <main>
+    <label for="language">Language:</label>
+    <select id="language">
+      <option value="English">English</option>
+      <option value="Hindi">Hindi</option>
+    </select>
+
+    <label for="newType">New Announcement Type:</label>
+    <input type="text" id="newType" />
+
+    <button id="addType">Add Type</button>
+
+    <h2>Announcement Types</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Language</th>
+          <th>Type</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="typesTable"></tbody>
+    </table>
+  </main>
+  <script src="js/announcementtype.js"></script>
+</body>
+</html>

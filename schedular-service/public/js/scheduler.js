@@ -47,6 +47,7 @@ document.getElementById("add-timing").addEventListener("click", () => {
 document.getElementById("scheduler-form").addEventListener("submit", async (e) => {
   e.preventDefault();
 
+  const name = document.getElementById("name").value;
   const language = document.getElementById("language").value;
   const audioId = document.getElementById("audio").value;
 
@@ -56,43 +57,77 @@ document.getElementById("scheduler-form").addEventListener("submit", async (e) =
 
   const frequency = Array.from(document.getElementById("frequency").selectedOptions).map((option) => option.value);
 
+  console.log("Submitting schedule:", { name, language, audioId, timings, startDate, endDate, frequency });
+
   try {
     const response = await fetch("/scheduler", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ language, audioId, timings, startDate, endDate, frequency }),
+      body: JSON.stringify({ name, language, audioId, timings, startDate, endDate, frequency }),
     });
 
     if (response.ok) {
       alert("Schedule saved successfully!");
       loadSchedules();
     } else {
-      alert("Error saving schedule.");
+      const error = await response.json();
+      console.error("Error response from server:", error);
+      alert("Error saving schedule: " + error.message);
     }
   } catch (error) {
     console.error("Error saving schedule:", error.message);
   }
 });
 
+
 async function loadSchedules() {
-  const response = await fetch("/scheduler");
-  const schedules = await response.json();
+  try {
+    const response = await fetch("/scheduler");
 
-  const tableBody = document.getElementById("schedule-table");
-  tableBody.innerHTML = "";
+    if (!response.ok) {
+      throw new Error(`Failed to fetch schedules: ${response.statusText}`);
+    }
 
-  schedules.forEach((schedule, index) => {
-    const row = `<tr>
-      <td>${index + 1}</td>
-      <td>${schedule.audioId}</td>
-      <td>${JSON.parse(schedule.timing).join(", ")}</td>
-      <td>${schedule.start_date} - ${schedule.end_date}</td>
-      <td>${schedule.frequency}</td>
-      <td><button onclick="deleteSchedule(${schedule.id})">Delete</button></td>
-    </tr>`;
-    tableBody.innerHTML += row;
-  });
+    const textResponse = await response.text(); // Get raw response
+    console.log("Raw response from /scheduler:", textResponse); // Debug log
+
+    const schedules = JSON.parse(textResponse.replace(/^\uFEFF/, "")); // Remove BOM if present
+    console.log("Parsed schedules:", schedules); // Debug log
+
+    const tableBody = document.getElementById("schedule-table");
+    tableBody.innerHTML = ""; // Clear the table
+
+    schedules.forEach((schedule, index) => {
+      // Directly use the timing field if it's already an array
+      const timings = Array.isArray(schedule.timing) ? schedule.timing : JSON.parse(schedule.timing);
+
+      // Parse frequency if it’s a stringified JSON array
+      let frequency;
+      try {
+        frequency = JSON.parse(schedule.frequency);
+      } catch (e) {
+        frequency = schedule.frequency; // Use as-is if not JSON
+      }
+
+      const row = `<tr>
+        <td>${index + 1}</td>
+        <td>${schedule.name || "Unnamed Schedule"}</td>
+        <td>${schedule.audioId}</td>
+        <td>${timings.join(", ")}</td>
+        <td>${new Date(schedule.start_date).toLocaleDateString()} - ${new Date(schedule.end_date).toLocaleDateString()}</td>
+        <td>${Array.isArray(frequency) ? frequency.join(", ") : frequency}</td>
+        <td><button onclick="deleteSchedule(${schedule.id})">Delete</button></td>
+      </tr>`;
+      tableBody.innerHTML += row;
+    });
+  } catch (error) {
+    console.error("Error loading schedules:", error.message);
+  }
 }
+
+
+
+
 
 // Delete a schedule
 async function deleteSchedule(id) {

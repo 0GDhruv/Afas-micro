@@ -23,24 +23,27 @@
   <main class="main-content">
     <h2>Scheduler</h2>
     <form id="scheduler-form">
+      <label for="name">Schedule Name:</label>
+      <input type="text" id="name" placeholder="Enter schedule name" required>
+    
       <label for="language">Language:</label>
       <select id="language" required></select>
-
+    
       <label for="audio">Announcement:</label>
       <select id="audio" required></select>
-
+    
       <label for="timing">Timing:</label>
       <div id="timing-container">
         <input type="time" class="timing-field" required>
         <button type="button" id="add-timing">+</button>
       </div>
-
+    
       <label for="start-date">From:</label>
       <input type="date" id="start-date" required>
-
+    
       <label for="end-date">To:</label>
       <input type="date" id="end-date" required>
-
+    
       <label for="frequency">Frequency:</label>
       <select id="frequency" multiple>
         <option value="all">Select All</option>
@@ -52,15 +55,16 @@
         <option value="Sat">Saturday</option>
         <option value="Sun">Sunday</option>
       </select>
-
       <button type="submit">Save Schedule</button>
     </form>
+    
 
     <h2>Schedules</h2>
     <table>
       <thead>
         <tr>
           <th>Sr. No.</th>
+          <th>Name</th>
           <th>Announcement</th>
           <th>Timing</th>
           <th>From - To</th>
@@ -69,7 +73,7 @@
         </tr>
       </thead>
       <tbody id="schedule-table"></tbody>
-    </table>
+    </table>    
   </main>
 
   <script src="js/scheduler.js"></script>
