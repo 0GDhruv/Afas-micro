@@ -2,30 +2,36 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Announcement Types</title>
-  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
-  <header>
+  <header class="top-bar">
     <h1>Announcement Types</h1>
   </header>
+
   <main>
-    <label for="language">Language:</label>
-    <select id="language">
-      <option value="English">English</option>
-      <option value="Hindi">Hindi</option>
-    </select>
+    <h2>Manage Announcement Types</h2>
+    <form id="announcementtype-form">
+      <label for="language">Language:</label>
+      <select id="language" required>
+        <option value="English">English</option>
+        <option value="Hindi">Hindi</option>
+        <option value="Regional">Regional</option>
+      </select>
 
-    <label for="newType">New Announcement Type:</label>
-    <input type="text" id="newType" />
+      <label for="newType">New Announcement Type:</label>
+      <input type="text" id="newType" required>
 
-    <button id="addType">Add Type</button>
+      <button type="submit">Add Type</button>
+    </form>
 
-    <h2>Announcement Types</h2>
+    <h2>Existing Announcement Types</h2>
     <table>
       <thead>
         <tr>
-          <th>ID</th>
+          <th>#</th>
           <th>Language</th>
           <th>Type</th>
           <th>Action</th>
@@ -34,6 +40,7 @@
       <tbody id="typesTable"></tbody>
     </table>
   </main>
-  <script src="js/announcementtype.js"></script>
+
+  <script src="/js/announcementtype.js"></script>
 </body>
 </html>

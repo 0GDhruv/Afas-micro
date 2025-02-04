@@ -1,79 +1,160 @@
-async function loadLanguages() {
-    const response = await fetch("/scriptmanager/languages");
-    const languages = await response.json();
-  
-    const languageDropdown = document.getElementById("language");
-    languageDropdown.innerHTML = "<option disabled selected>Select Language</option>";
-  
-    languages.forEach((language) => {
-      const option = document.createElement("option");
-      option.value = language;
-      option.textContent = language.charAt(0).toUpperCase() + language.slice(1);
-      languageDropdown.appendChild(option);
-    });
-  }
-  
-  async function loadAnnouncementTypes(language) {
-    const response = await fetch(`/scriptmanager/announcement-types?language=${language}`);
+// Handle language tab switching
+document.querySelectorAll(".language-tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelector(".language-tab.active").classList.remove("active");
+    tab.classList.add("active");
+    loadAnnouncementTypes();
+    loadScripts();
+  });
+});
+
+function getSelectedLanguage() {
+  return document.querySelector(".language-tab.active").getAttribute("data-lang");
+}
+
+// Load Announcement Types based on selected language
+async function loadAnnouncementTypes() {
+  const language = getSelectedLanguage();
+  try {
+    const response = await fetch(`/announcementtype?language=${language}`);
+    if (!response.ok) throw new Error("Failed to fetch announcement types.");
     const types = await response.json();
-  
+
     const typeDropdown = document.getElementById("announcementType");
-    typeDropdown.innerHTML = "<option disabled selected>Select Announcement Type</option>";
-  
+    typeDropdown.innerHTML = "<option value='' disabled selected>Select Announcement Type</option>";
     types.forEach((type) => {
       const option = document.createElement("option");
       option.value = type;
       option.textContent = type;
       typeDropdown.appendChild(option);
     });
+  } catch (err) {
+    console.error("Error loading announcement types:", err.message);
   }
-  
-  async function addScript() {
-    const language = document.getElementById("language").value;
-    const announcementType = document.getElementById("announcementType").value;
-    const scriptName = document.getElementById("scriptName").value;
-    const sequence = document.getElementById("sequence").value.split(",");
-  
+}
+
+async function fetchTranscriptions(audioSequence) {
+  const sequenceArray = audioSequence.split(",").map((s) => s.trim());
+  const transcriptions = [];
+
+  for (const audio of sequenceArray) {
+    if (audio.startsWith("*") && audio.endsWith("*")) {
+      // Dynamic variable placeholder
+      const variableName = audio.slice(1, -1); // Remove surrounding '*'
+      transcriptions.push(`*${variableName}*`);
+    } else {
+      // Fetch transcription for uploaded audio
+      try {
+        const response = await fetch(`/scriptmanager/transcription?audio=${audio}`);
+        if (response.ok) {
+          const { transcription } = await response.json();
+          transcriptions.push(transcription || "N/A");
+        } else {
+          transcriptions.push("N/A");
+        }
+      } catch (err) {
+        console.error(`Error fetching transcription for ${audio}:`, err.message);
+        transcriptions.push("N/A");
+      }
+    }
+  }
+
+  return transcriptions.join(" ");
+}
+
+async function addScript(e) {
+  e.preventDefault();
+  const name = document.getElementById("name").value.trim();
+  const language = getSelectedLanguage();
+  const announcementType = document.getElementById("announcementType").value;
+  const sequence = document.getElementById("sequence").value.trim();
+
+  if (!name || !language || !announcementType || !sequence) {
+    alert("All fields are required.");
+    return;
+  }
+
+  // Fetch transcriptions for the sequence
+  const transcription = await fetchTranscriptions(sequence);
+
+  try {
     const response = await fetch("/scriptmanager/scripts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ language, announcementType, name: scriptName, sequence }),
+      body: JSON.stringify({ name, language, announcementType, sequence, transcription }),
     });
-  
+
     if (response.ok) {
       alert("Script added successfully!");
       loadScripts();
     } else {
       alert("Failed to add script.");
     }
+  } catch (err) {
+    console.error("Error adding script:", err.message);
   }
-  
-  async function loadScripts() {
-    const response = await fetch("/scriptmanager/scripts");
+}
+
+
+  try {
+    const response = await fetch("/scriptmanager/scripts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ language, announcementType, sequence }),
+    });
+    if (response.ok) {
+      alert("Script added successfully!");
+      loadScripts();
+    } else {
+      alert("Failed to add script.");
+    }
+  } catch (err) {
+    console.error("Error adding script:", err.message);
+  }
+
+// Load existing scripts
+async function loadScripts() {
+  const language = getSelectedLanguage();
+  try {
+    const response = await fetch(`/scriptmanager/scripts?language=${language}`);
+    if (!response.ok) throw new Error("Failed to fetch scripts.");
     const scripts = await response.json();
-  
+
     const tableBody = document.getElementById("scriptsTable");
     tableBody.innerHTML = "";
-  
     scripts.forEach((script, index) => {
       const row = `<tr>
         <td>${index + 1}</td>
-        <td>${script.name}</td>
-        <td>${script.language}</td>
-        <td>${script.announcement_type}</td>
-        <td>${JSON.parse(script.sequence).join(", ")}</td>
+        <td>${script.announcementType}</td>
+        <td>${script.sequence}</td>
+        <td>${script.transcription || "N/A"}</td>
+        <td><button onclick="deleteScript(${script.id})">Delete</button></td>
       </tr>`;
       tableBody.innerHTML += row;
     });
+  } catch (err) {
+    console.error("Error loading scripts:", err.message);
   }
-  
-  document.getElementById("language").addEventListener("change", (e) => {
-    const selectedLanguage = e.target.value;
-    loadAnnouncementTypes(selectedLanguage);
-  });
-  
-  document.getElementById("addScriptButton").addEventListener("click", addScript);
-  
-  loadLanguages();
-  loadScripts();
-  
+}
+
+// Delete a script
+async function deleteScript(id) {
+  try {
+    const response = await fetch(`/scriptmanager/scripts/${id}`, { method: "DELETE" });
+    if (response.ok) {
+      alert("Script deleted successfully!");
+      loadScripts();
+    } else {
+      alert("Failed to delete script.");
+    }
+  } catch (err) {
+    console.error("Error deleting script:", err.message);
+  }
+}
+
+// Event Listeners
+document.getElementById("scriptmanager-form").addEventListener("submit", addScript);
+
+// Initialize
+loadAnnouncementTypes();
+loadScripts();

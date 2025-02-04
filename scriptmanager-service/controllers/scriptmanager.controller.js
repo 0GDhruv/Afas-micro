@@ -1,61 +1,79 @@
 import db from "../config/db.config.js";
 
-// Fetch announcement types by language
-export const getAnnouncementTypes = async (req, res) => {
-  const { language } = req.query;
+// Fetch transcription for a specific audio file
+export const getTranscription = async (req, res) => {
+  const { audio } = req.query;
+
+  if (!audio) {
+    return res.status(400).json({ message: "Audio file name is required." });
+  }
 
   try {
-    const [types] = await db.execute(
-      `SELECT DISTINCT announcement_type 
-       FROM announcement_types 
-       WHERE language = ?`,
-      [language]
+    const [result] = await db.execute(
+      "SELECT transcription FROM uploaded_audios WHERE file_name = ?",
+      [audio]
     );
 
-    res.json(types.map((type) => type.announcement_type));
+    if (result.length > 0) {
+      res.json({ transcription: result[0].transcription || "N/A" });
+    } else {
+      res.status(404).json({ transcription: "N/A" });
+    }
   } catch (err) {
-    console.error("Error fetching announcement types:", err.message);
+    console.error("Error fetching transcription:", err.message);
     res.status(500).json({ message: "Database error", error: err.message });
   }
 };
 
-// Fetch audio files for sequence
-export const getAudioFiles = async (req, res) => {
-  try {
-    const response = await axios.get("http://localhost:4003/audio-files");
-    res.json(response.data);
-  } catch (err) {
-    console.error("Error fetching audio files:", err.message);
-    res.status(500).json({ message: "Error fetching audio files", error: err.message });
-  }
-};
-
-// Add a new script
+// Add a script
 export const addScript = async (req, res) => {
-  const { name, language, announcementType, sequence } = req.body;
+  const { name, language, announcementType, sequence, transcription } = req.body;
 
-  const scriptName = `${language}_${announcementType}_${name}`;
+  if (!name || !language || !announcementType || !sequence || !transcription) {
+    return res.status(400).json({ message: "All fields are required." });
+  }
+
   try {
     await db.execute(
-      "INSERT INTO scripts (name, language, announcement_type, sequence) VALUES (?, ?, ?, ?)",
-      [scriptName, language, announcementType, JSON.stringify(sequence)]
+      "INSERT INTO scripts (name, language, announcement_type, sequence, transcription) VALUES (?, ?, ?, ?, ?)",
+      [name, language, announcementType, JSON.stringify(sequence.split(",")), transcription]
     );
-
-    res.status(201).json({ message: "Script added successfully", scriptName });
+    res.status(201).json({ message: "Script added successfully." });
   } catch (err) {
     console.error("Error adding script:", err.message);
     res.status(500).json({ message: "Database error", error: err.message });
   }
 };
 
-// Fetch all scripts
+export const getLanguages = async (req, res) => {
+  try {
+    const [languages] = await db.execute("SELECT DISTINCT language FROM announcement_types");
+    res.json(languages.map(row => row.language));
+  } catch (err) {
+    console.error("Error fetching languages:", err.message);
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
 export const getScripts = async (req, res) => {
   try {
     const [scripts] = await db.execute("SELECT * FROM scripts");
-
     res.json(scripts);
   } catch (err) {
     console.error("Error fetching scripts:", err.message);
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+
+export const deleteScript = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    await db.execute("DELETE FROM scripts WHERE id = ?", [id]);
+    res.status(204).send();
+  } catch (err) {
+    console.error("Error deleting script:", err.message);
     res.status(500).json({ message: "Database error", error: err.message });
   }
 };

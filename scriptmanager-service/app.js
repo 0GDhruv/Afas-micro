@@ -18,14 +18,18 @@ const __dirname = path.dirname(__filename);
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "public"))); // Serve static files from "public"
+app.use(express.static(path.join(__dirname, "public")));
 
-// Routes
+// API Routes
 app.use("/announcementtype", announcementTypeRoutes);
 app.use("/scriptmanager", scriptManagerRoutes);
 
-// Serve the default HTML page for the root route
-app.get("/", (req, res) => {
+// Serve Static Pages
+app.get("/announcementtype", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "announcementtype.html"));
+});
+
+app.get("/scriptmanager", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "scriptmanager.html"));
 });
 

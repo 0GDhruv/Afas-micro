@@ -1,16 +1,16 @@
 import express from "express";
 import {
-  getAnnouncementTypes,
-  getAudioFiles,
+  getTranscription,
   addScript,
   getScripts,
+  deleteScript,
 } from "../controllers/scriptmanager.controller.js";
 
 const router = express.Router();
 
-router.get("/announcement-types", getAnnouncementTypes);
-router.get("/audio-files", getAudioFiles);
-router.post("/scripts", addScript);
-router.get("/scripts", getScripts);
+router.get("/transcription", getTranscription); // Endpoint to fetch transcription for an audio
+router.post("/scripts", addScript); // Endpoint to add a script
+router.get("/scripts", getScripts); // Endpoint to fetch scripts
+router.delete("/scripts/:id", deleteScript); // Endpoint to delete a script
 
 export default router;

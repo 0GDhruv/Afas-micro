@@ -7,45 +7,64 @@
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-  <header>
+  <!-- Top Bar -->
+  <header class="top-bar">
     <h1>Welcome to AFAS</h1>
     <button id="logout-button">Logout</button>
   </header>
 
-  <nav>
+  <!-- Side Navigation Bar -->
+  <nav class="side-nav">
     <ul>
-      <li><a href="/">Dashboard</a></li>
-      <li><a href="/scriptmanager" class="active">Script Manager</a></li>
+      <li><a href="/dashboard">Dashboard</a></li>
+      <li><a href="/upload">Upload Audio</a></li>
+      <li><a href="/announcementtype">Announcement Type</a></li>
+      <li><a href="/scriptmanager" class="active">Sequence</a></li>
+      <li><a href="/scheduler">Scheduler</a></li>
+      <li><a href="/zones">Zones</a></li>
+      <li><a href="/zone-selector">Zone Selector</a></li>
+      <li><a href="/users">Users</a></li>
+      <li><a href="/permissions">Permissions</a></li>
     </ul>
   </nav>
 
-  <main>
-    <h2>Script Manager</h2>
-    <div>
-      <label for="language">Language:</label>
-      <select id="language"></select>
+  <!-- Main Content -->
+  <main class="main-content">
+    <h2>Sequence</h2>
 
-      <label for="announcementType">Announcement Type:</label>
-      <select id="announcementType"></select>
-
-      <label for="scriptName">Script Name:</label>
-      <input type="text" id="scriptName">
-
-      <label for="sequence">Sequence:</label>
-      <textarea id="sequence"></textarea>
-
-      <button id="addScriptButton">Add Script</button>
+    <!-- Language Tabs -->
+    <div class="language-tabs">
+      <button class="language-tab active" data-lang="english">English</button>
+      <button class="language-tab" data-lang="hindi">Hindi</button>
+      <button class="language-tab" data-lang="regional">Regional</button>
     </div>
 
-    <h3>Scripts</h3>
+    <!-- Form for Adding a Script -->
+    <form id="scriptmanager-form">
+      <label for="announcementType">Announcement Type *</label>
+      <select id="announcementType" required>
+        <option value="" disabled selected>Select Announcement Type</option>
+      </select>
+
+      <label for="sequence">Sequence *</label>
+      <input type="text" id="sequence" placeholder="Enter sequence (comma-separated)" required>
+
+      <label for="transcription">Transcription</label>
+      <textarea id="transcription" placeholder="This will auto-generate based on audio type" disabled></textarea>
+
+      <button type="submit">Add Sequence</button>
+    </form>
+
+    <!-- Existing Scripts Table -->
+    <h2>Existing Sequences</h2>
     <table>
       <thead>
         <tr>
-          <th>Sr. No.</th>
-          <th>Script Name</th>
-          <th>Language</th>
-          <th>Announcement Type</th>
+          <th>SR. NO.</th>
+          <th>Announcement</th>
           <th>Sequence</th>
+          <th>Transcription</th>
+          <th>Action</th>
         </tr>
       </thead>
       <tbody id="scriptsTable"></tbody>
