@@ -6,7 +6,7 @@ const router = express.Router();
 const upload = multer({ dest: "uploads/temp" });
 
 router.post("/", upload.single("audio"), uploadAudio);
-router.get("/", getAllAudios);
+router.get("/", getAllAudios); // ✅ Ensure this gets `?language=` correctly
 router.delete("/:id", deleteAudio);
 
 export default router;

@@ -24,45 +24,51 @@ app.get("/languages", (req, res) => {
 
   try {
     if (!fs.existsSync(uploadDir)) {
-      return res.json([]); // Return an empty array if the directory doesn't exist
+      console.warn("⚠ Uploads directory does not exist.");
+      return res.json([]); // ✅ Return empty array
     }
 
     const languages = fs.readdirSync(uploadDir).filter((item) =>
       fs.statSync(path.join(uploadDir, item)).isDirectory()
     );
 
+    console.log("✅ Available languages:", languages);
     res.json(languages);
   } catch (err) {
-    console.error("Error fetching languages:", err.message);
+    console.error("❌ Error fetching languages:", err.message);
     res.status(500).json({ message: "Error fetching languages", error: err.message });
   }
 });
 
+
 app.get("/audio-files", (req, res) => {
   const { language, type } = req.query; // Get language and type from query params
+  if (!language || !type) {
+    console.error("🚨 Missing required parameters: language or type");
+    return res.status(400).json({ message: "Language and type are required." });
+  }
+
   const audioDir = path.join(__dirname, "uploads", language, type);
+  console.log(`🔍 Checking directory: ${audioDir}`);
 
   try {
-    console.log("Looking for audio files in:", audioDir); // Debug log
-
-    // Check if the directory exists
     if (!fs.existsSync(audioDir)) {
-      console.log("Directory does not exist:", audioDir);
-      return res.json([]); // Return empty array if folder doesn't exist
+      console.warn(`⚠ Directory does not exist: ${audioDir}`);
+      return res.json([]); // ✅ Return an empty array if folder doesn't exist
     }
 
-    // Get all files in the directory
     const files = fs.readdirSync(audioDir).filter((file) =>
       fs.statSync(path.join(audioDir, file)).isFile()
     );
 
-    console.log("Audio files found:", files); // Debug log
-    res.json(files); // Return the list of audio files
+    console.log("✅ Audio files found:", files);
+    res.json(files);
   } catch (err) {
-    console.error("Error fetching audio files:", err.message);
+    console.error("❌ Error fetching audio files:", err.message);
     res.status(500).json({ message: "Error fetching audio files", error: err.message });
   }
 });
+
 
 // Start the server
 const PORT = process.env.PORT || 4003;

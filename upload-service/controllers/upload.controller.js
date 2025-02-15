@@ -33,16 +33,33 @@ export const uploadAudio = async (req, res) => {
 };
 
 // Get All Audios by Language
+// Get All Audios by Language
 export const getAllAudios = async (req, res) => {
   const { language } = req.query;
 
+  if (!language) {
+    console.error("🚨 Missing language parameter in request.");
+    return res.status(400).json({ message: "Language parameter is required." });
+  }
+
   try {
+    console.log(`🔍 Fetching audios for language: ${language}`);
+
     const [audios] = await db.execute("SELECT * FROM audios WHERE language = ?", [language]);
+
+    if (!audios || audios.length === 0) {
+      console.warn(`⚠ No audios found for language: ${language}`);
+      return res.json([]); // ✅ Return an empty array instead of an error
+    }
+
+    console.log("✅ Audios fetched successfully:", audios);
     res.json(audios);
   } catch (err) {
+    console.error("❌ Database error while fetching audios:", err.message);
     res.status(500).json({ message: "Database error", error: err.message });
   }
 };
+
 
 // Delete Audio
 export const deleteAudio = async (req, res) => {

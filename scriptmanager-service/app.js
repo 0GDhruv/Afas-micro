@@ -15,8 +15,14 @@ const PORT = process.env.PORT || 4006;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// ✅ Enable CORS for All Routes
+app.use(cors({
+  origin: "*",  // Allow requests from any origin
+  methods: ["GET", "POST", "DELETE", "PUT", "OPTIONS"],
+  allowedHeaders: ["Content-Type"]
+}));
+
 // Middleware
-app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -35,5 +41,5 @@ app.get("/scriptmanager", (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Script Manager Service running on http://localhost:${PORT}`);
+  console.log(`✅ Script Manager Service running on http://localhost:${PORT}`);
 });
