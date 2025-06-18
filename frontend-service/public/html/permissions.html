@@ -38,9 +38,9 @@
                 </select>
           </div>
           <div class="form-group">
-            <label for="permPage">Page:</label>
-            <select id="permPage" required>
-              <option value="">-- Select Page --</option>
+            <label for="permPage">Page(s):</label>
+            {/* <!-- ✅ Changed to a multi-select dropdown --> */}
+            <select id="permPage" required multiple>
               <option value="dashboard">Dashboard</option>
               <option value="upload">Upload Audio</option>
               <option value="announcement-type">Announcement Type</option>
@@ -53,6 +53,8 @@
               <option value="users">User Management</option>
               <option value="permissions">Permission Management</option>
             </select>
+            {/* <!-- ✅ Added helper text for multi-select --> */}
+            <small>Hold Ctrl (or Cmd on Mac) to select multiple pages.</small>
           </div>
           <button type="submit"><i class="fas fa-check-circle"></i> Assign Permission</button>
         </form>

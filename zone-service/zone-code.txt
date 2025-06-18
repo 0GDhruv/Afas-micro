@@ -15,6 +15,7 @@ const pool = mysql.createPool({
 export default pool;
 
 
+
 zone.controller.js-
 import {
   getAllZones,
@@ -56,6 +57,9 @@ export const deleteMapping = async (req, res) => {
 };
 
 
+
+
+
 zone.model.js-
 import db from "../config/db.config.js";
 
@@ -77,6 +81,9 @@ export const addZoneMapping = (announcement_type_id, zone_name) =>
 
 export const deleteZoneMapping = (id) =>
   db.execute("DELETE FROM announcement_zones WHERE id = ?", [id]);
+
+
+
 
 
 zones.routes.js-
@@ -107,6 +114,9 @@ DB_PASS=Infosoft@123
 DB_NAME=afas
 DB_PORT=3306
 PORT=4013
+
+
+
 
 app.js-
 import express from "express";

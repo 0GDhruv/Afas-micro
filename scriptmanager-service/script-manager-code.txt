@@ -18,244 +18,237 @@ export default db;
 
 
 
+
 controllers/announcementtype.controller.js - 
+// script-manager-service/controllers/announcementtype.controller.js
 import db from "../config/db.config.js";
 import axios from "axios";
 
-// ✅ Fetch languages dynamically
+const LOGS_SERVICE_URL = process.env.LOGS_SERVICE_URL || "http://localhost:4025/api/logs";
+const SERVICE_NAME = "ScriptManagerService_AnnouncementType";
+
+async function sendToLogsService(logData) {
+  try {
+    await axios.post(LOGS_SERVICE_URL, { service_name: SERVICE_NAME, ...logData });
+  } catch (error) { console.error(`${SERVICE_NAME} - Error sending log:`, error.message); }
+}
+
 export const getLanguages = async (req, res) => {
   try {
-    console.log("📢 Fetching languages...");
-    const response = await axios.get("http://localhost:4003/languages");
+    const response = await axios.get("http://localhost:4003/languages"); // From Upload Service
     res.json(response.data);
   } catch (err) {
+    sendToLogsService({ log_type: "ERROR", message: "Error fetching languages from Upload Service.", details: { error: err.message } });
     res.status(500).json({ message: "Error fetching languages", error: err.message });
   }
 };
 
-// ✅ Fetch announcement types for selected language & area
 export const getAnnouncementTypes = async (req, res) => {
   const { language, area } = req.query;
-
   if (!language || !area) {
     return res.status(400).json({ message: "Language and Area are required." });
   }
-
   try {
-    console.log(`🔍 Fetching announcement types for Language: ${language}, Area: ${area}`);
     const [types] = await db.execute(
       "SELECT type FROM announcement_types WHERE language = ? AND area = ?",
       [language, area]
     );
-
     res.json(types.map(row => row.type));
   } catch (err) {
+    sendToLogsService({ log_type: "ERROR", message: `Error fetching announcement types for ${language}/${area}.`, details: { error: err.message } });
     res.status(500).json({ message: "Database error", error: err.message });
   }
 };
 
-
 export const addAnnouncementType = async (req, res) => {
   const { language, type, area } = req.body;
-
   if (!language || !type || !area) {
     return res.status(400).json({ message: "Language, Type, and Area are required." });
   }
-
   try {
-    console.log(`➕ Adding Announcement Type: ${type}, Language: ${language}, Area: ${area}`);
-
     await db.execute(
       "INSERT INTO announcement_types (language, type, area) VALUES (?, ?, ?)",
       [language, type, area]
     );
-
-    console.log("✅ Announcement Type added successfully!");
+    sendToLogsService({ log_type: "ANNOUNCEMENT_TYPE_ADDED", message: `Added type: ${type} for ${language}/${area}.`, details: req.body });
     res.status(201).json({ message: "Announcement type added successfully." });
   } catch (err) {
-    console.error("❌ Error adding announcement type:", err.message);
+    sendToLogsService({ log_type: "ERROR", message: `Error adding announcement type: ${type}.`, details: { ...req.body, error: err.message } });
     res.status(500).json({ message: "Database error", error: err.message });
   }
 };
 
-
-// ✅ Delete an announcement type for a selected language
 export const deleteAnnouncementType = async (req, res) => {
-  const { type } = req.params;
-  const { language } = req.query;
-
-  if (!language || !type) {
-    return res.status(400).json({ message: "Language and type are required." });
+  const { type: typeName } = req.params; // Renamed for clarity
+  const { language, area } = req.query; // Area should also be part of the key for deletion
+  if (!language || !typeName || !area) {
+    return res.status(400).json({ message: "Language, Type name, and Area are required for deletion." });
   }
-
   try {
-    console.log(`🗑 Deleting announcement type: ${type} for language: ${language}`);
-
-    await db.execute(
-      "DELETE FROM announcement_types WHERE language = ? AND type = ?",
-      [language, type]
+    const [result] = await db.execute(
+      "DELETE FROM announcement_types WHERE language = ? AND type = ? AND area = ?",
+      [language, typeName, area]
     );
-
-    console.log("✅ Announcement Type deleted successfully!");
-    res.status(204).send();
+    if (result.affectedRows > 0) {
+        sendToLogsService({ log_type: "ANNOUNCEMENT_TYPE_DELETED", message: `Deleted type: ${typeName} for ${language}/${area}.` });
+        res.status(200).json({ message: "Announcement type deleted successfully." }); // Send 200 with message
+    } else {
+        sendToLogsService({ log_type: "WARNING", message: `Attempted to delete non-existent type: ${typeName} for ${language}/${area}.` });
+        res.status(404).json({ message: "Announcement type not found for the given language and area." });
+    }
   } catch (err) {
-    console.error("❌ Error deleting announcement type:", err.message);
+    sendToLogsService({ log_type: "ERROR", message: `Error deleting announcement type: ${typeName}.`, details: { language, area, error: err.message } });
     res.status(500).json({ message: "Database error", error: err.message });
   }
 };
+
 
 
 
 controller/scriptmanager.controller.js - 
+// script-manager-service/controllers/scriptmanager.controller.js
 import db from "../config/db.config.js";
+import axios from "axios";
 
-// ✅ Fetch transcription for a given sequence of audio files
+const LOGS_SERVICE_URL = process.env.LOGS_SERVICE_URL || "http://localhost:4025/api/logs";
+const SERVICE_NAME = "ScriptManagerService_Scripts";
+
+async function sendToLogsService(logData) {
+  try {
+    await axios.post(LOGS_SERVICE_URL, { service_name: SERVICE_NAME, ...logData });
+  } catch (error) { console.error(`${SERVICE_NAME} - Error sending log:`, error.message); }
+}
+
 export const getTranscriptions = async (req, res) => {
   const { sequence, language } = req.query;
-
   if (!sequence || !language) {
     return res.status(400).json({ message: "Sequence and Language parameters are required." });
   }
-
-  const sequenceArray = sequence.split(",").map(s => s.trim());
+  const sequenceArray = String(sequence).split(",").map(s => s.trim()).filter(s => s);
   const transcriptions = [];
-
-  for (const audio of sequenceArray) {
-    if (audio.startsWith("*") && audio.endsWith("*")) {
-      transcriptions.push(audio);
-    } else {
-      try {
+  try {
+    for (const audioFileOrPlaceholder of sequenceArray) {
+      if (audioFileOrPlaceholder.startsWith("*") && audioFileOrPlaceholder.endsWith("*")) {
+        transcriptions.push(audioFileOrPlaceholder);
+      } else {
         const [result] = await db.execute(
           `SELECT transcription FROM audios 
-           WHERE LOWER(REPLACE(filePath, '\\\\', '/')) LIKE LOWER(?) 
-           AND LOWER(language) = LOWER(?)`,
-          [`%/${audio}.wav`, language]
+           WHERE language = ? AND (filePath LIKE ? OR filePath LIKE ?)`,
+          [language, `%/${audioFileOrPlaceholder}`, `%/${audioFileOrPlaceholder}.wav`]
         );
-
-        if (result.length > 0) {
-          transcriptions.push(result[0].transcription || "N/A");
+        if (result.length > 0 && result[0].transcription) {
+          transcriptions.push(result[0].transcription);
         } else {
-          transcriptions.push("N/A");
+          transcriptions.push(`[${audioFileOrPlaceholder}-N/A]`);
         }
-      } catch (err) {
-        console.error(`❌ Error fetching transcription for ${audio}:`, err.message);
-        transcriptions.push("N/A");
       }
     }
+    res.json({ transcriptions });
+  } catch (err) {
+    sendToLogsService({ log_type: "ERROR", message: "Error fetching transcriptions.", details: { sequence, language, error: err.message } });
+    console.error("Error in getTranscriptions:", err);
+    res.status(500).json({ message: "Error fetching transcriptions", error: err.message });
   }
-
-  res.json({ transcriptions });
 };
 
-// ✅ Add a new script
 export const addScript = async (req, res) => {
   const { language, announcementType, sequence, transcription, area } = req.body;
-
   if (!language || !announcementType || !sequence || !area) {
-    return res.status(400).json({ message: "All fields are required." });
+    return res.status(400).json({ message: "All fields (language, announcementType, sequence, area) are required." });
   }
-
   try {
-    const sequenceArray = sequence
-      .split(",")
-      .map(s => s.trim())
-      .filter(s => s !== "");
-
+    const sequenceArray = String(sequence).split(",").map(s => s.trim()).filter(s => s);
     const sequenceJSON = JSON.stringify(sequenceArray);
-
-    await db.execute(
+    const [result] = await db.execute( // Get result to access insertId
       "INSERT INTO scripts (language, announcement_type, sequence, transcription, area) VALUES (?, ?, ?, ?, ?)",
-      [language, announcementType, sequenceJSON, transcription, area]
+      [language, announcementType, sequenceJSON, transcription || null, area]
     );
-
-    res.status(201).json({ message: "Script added successfully." });
+    sendToLogsService({ log_type: "SCRIPT_ADDED", message: `Added script for type: ${announcementType} (ID: ${result.insertId}).`, details: {area, language, announcementType} });
+    res.status(201).json({ message: "Script added successfully.", id: result.insertId });
   } catch (err) {
+    sendToLogsService({ log_type: "ERROR", message: `Error adding script for type: ${announcementType}.`, details: { ...req.body, error: err.message } });
     res.status(500).json({ message: "Database error", error: err.message });
   }
 };
 
-// ✅ Update script
 export const updateScript = async (req, res) => {
   const { id } = req.params;
   const { announcementType, language, sequence, transcription, area } = req.body;
-
+  if (!id || !language || !announcementType || !sequence || !area) {
+    return res.status(400).json({ message: "All fields are required for update." });
+  }
   try {
-    const sequenceArray = sequence
-      .split(",")
-      .map(s => s.trim())
-      .filter(s => s !== "");
-
+    const sequenceArray = String(sequence).split(",").map(s => s.trim()).filter(s => s);
     const sequenceJSON = JSON.stringify(sequenceArray);
-
-    await db.execute(
+    const [result] = await db.execute(
       "UPDATE scripts SET announcement_type = ?, language = ?, sequence = ?, transcription = ?, area = ? WHERE id = ?",
-      [announcementType, language, sequenceJSON, transcription, area, id]
+      [announcementType, language, sequenceJSON, transcription || null, area, id]
     );
-
-    res.status(200).json({ message: "Script updated successfully." });
+    if (result.affectedRows > 0) {
+        sendToLogsService({ log_type: "SCRIPT_UPDATED", message: `Updated script ID: ${id}.`, details: {announcementType, area, language} });
+        res.status(200).json({ message: "Script updated successfully." });
+    } else {
+        sendToLogsService({ log_type: "WARNING", message: `Attempted to update non-existent script ID: ${id}.` });
+        res.status(404).json({ message: "Script not found for update." });
+    }
   } catch (err) {
+    sendToLogsService({ log_type: "ERROR", message: `Error updating script ID: ${id}.`, details: { ...req.body, error: err.message } });
     res.status(500).json({ message: "Database error", error: err.message });
   }
 };
 
-// ✅ Get script by ID
 export const getScriptById = async (req, res) => {
   const { id } = req.params;
-
   try {
     const [script] = await db.execute("SELECT * FROM scripts WHERE id = ?", [id]);
-
     if (script.length === 0) {
       return res.status(404).json({ message: "Script not found" });
     }
-
     res.json(script[0]);
   } catch (err) {
+    sendToLogsService({ log_type: "ERROR", message: `Error fetching script ID: ${id}.`, details: { error: err.message } });
     res.status(500).json({ message: "Database error", error: err.message });
   }
 };
 
-// ✅ Fetch scripts
 export const getScripts = async (req, res) => {
   const { language, area } = req.query;
   if (!language || !area) {
     return res.status(400).json({ message: "Language and Area are required." });
   }
-
   try {
     const [scripts] = await db.execute(
       "SELECT id, language, announcement_type, sequence, transcription, area FROM scripts WHERE language = ? AND area = ?",
       [language, area]
     );
-
     res.json(scripts);
   } catch (err) {
+    sendToLogsService({ log_type: "ERROR", message: `Error fetching scripts for ${language}/${area}.`, details: { error: err.message } });
     res.status(500).json({ message: "Database error", error: err.message });
   }
 };
 
-// ✅ Delete
 export const deleteScript = async (req, res) => {
   const { id } = req.params;
-
   try {
-    await db.execute("DELETE FROM scripts WHERE id = ?", [id]);
-    res.status(204).send();
+    // Optional: Fetch script details before deleting for logging purposes
+    const [scriptDetails] = await db.execute("SELECT announcement_type, language, area FROM scripts WHERE id = ?", [id]);
+    
+    const [result] = await db.execute("DELETE FROM scripts WHERE id = ?", [id]);
+    if (result.affectedRows > 0) {
+        const details = scriptDetails.length > 0 ? scriptDetails[0] : { id };
+        sendToLogsService({ log_type: "SCRIPT_DELETED", message: `Deleted script ID: ${id}.`, details });
+        res.status(200).json({ message: "Script deleted successfully." });
+    } else {
+        sendToLogsService({ log_type: "WARNING", message: `Attempted to delete non-existent script ID: ${id}.` });
+        res.status(404).json({ message: "Script not found for deletion." });
+    }
   } catch (err) {
+    sendToLogsService({ log_type: "ERROR", message: `Error deleting script ID: ${id}.`, details: { error: err.message } });
     res.status(500).json({ message: "Database error", error: err.message });
   }
 };
 
-// ✅ Get languages for UI
-export const getLanguages = async (req, res) => {
-  try {
-    const [languages] = await db.execute("SELECT DISTINCT language FROM announcement_types");
-    res.json(languages.map(row => row.language));
-  } catch (err) {
-    console.error("Error fetching languages:", err.message);
-    res.status(500).json({ message: "Database error", error: err.message });
-  }
-};
 
 
 
@@ -317,6 +310,7 @@ router.delete("/scripts/:id", deleteScript);
 export default router;
 
 
+
 .env-
 DB_HOST=localhost
 DB_USER=root
@@ -358,3 +352,60 @@ app.listen(PORT, () => {
 });
 
 
+
+
+fix_script_sequence.js-
+import db from "./config/db.config.js";
+
+const fixBrokenSequences = async () => {
+  try {
+    console.log("🔄 Checking and fixing non-JSON sequences...");
+
+    const [rows] = await db.execute("SELECT id, sequence FROM scripts");
+
+    for (const row of rows) {
+      const { id, sequence } = row;
+
+      let needsUpdate = false;
+      let fixedSequenceArray = [];
+
+      if (typeof sequence === "string") {
+        // Check if it's already valid JSON
+        try {
+          const parsed = JSON.parse(sequence);
+          if (Array.isArray(parsed)) {
+            continue; // ✅ Already valid
+          }
+        } catch (err) {
+          // ❌ Not valid JSON, attempt to fix it
+          fixedSequenceArray = sequence
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) => s !== "");
+
+          needsUpdate = true;
+        }
+      } else if (Array.isArray(sequence)) {
+        // Already a valid array (from MySQL JSON column)
+        continue;
+      }
+
+      if (needsUpdate) {
+        const fixedSequenceJSON = JSON.stringify(fixedSequenceArray);
+        await db.execute("UPDATE scripts SET sequence = ? WHERE id = ?", [
+          fixedSequenceJSON,
+          id,
+        ]);
+        console.log(`✅ Fixed script ID ${id}:`, fixedSequenceJSON);
+      }
+    }
+
+    console.log("🎉 All broken sequences converted to JSON.");
+  } catch (err) {
+    console.error("❌ Error fixing sequences:", err.message);
+  } finally {
+    process.exit(0);
+  }
+};
+
+fixBrokenSequences();

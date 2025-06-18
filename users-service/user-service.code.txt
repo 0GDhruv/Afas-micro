@@ -1,0 +1,194 @@
+db.config.js-
+import mysql from "mysql2/promise";
+import dotenv from "dotenv";
+dotenv.config();
+
+const db = mysql.createPool({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASS,
+  database: process.env.DB_NAME,
+  waitForConnections: true,
+  connectionLimit: 10,
+});
+
+export default db;
+
+
+
+
+
+user.controller.js-
+import {
+    createUser,
+    getAllUsers,
+    deleteUser,
+    getPermissions,
+    setPermission,
+    removePermission
+  } from "../models/user.model.js";
+  
+  export const registerUser = async (req, res) => {
+    try {
+      const { name, email, password, role } = req.body;
+      await createUser({ name, email, password, role });
+      res.json({ message: "User created successfully" });
+    } catch (err) {
+      res.status(500).json({ message: "Error creating user", error: err.message });
+    }
+  };
+  
+  export const listUsers = async (req, res) => {
+    try {
+      const [users] = await getAllUsers();
+      res.json(users);
+    } catch (err) {
+      res.status(500).json({ message: "Error fetching users" });
+    }
+  };
+  
+  export const removeUser = async (req, res) => {
+    try {
+      await deleteUser(req.params.id);
+      res.sendStatus(204);
+    } catch (err) {
+      res.status(500).json({ message: "Error deleting user" });
+    }
+  };
+  
+  export const listPermissions = async (req, res) => {
+    try {
+      const [perms] = await getPermissions();
+      res.json(perms);
+    } catch (err) {
+      res.status(500).json({ message: "Error loading permissions" });
+    }
+  };
+  
+  export const addPermission = async (req, res) => {
+    try {
+      const { user_id, page } = req.body;
+      await setPermission(user_id, page);
+      res.status(201).json({ message: "Permission added" });
+    } catch (err) {
+      res.status(500).json({ message: "Error adding permission" });
+    }
+  };
+  
+  export const deletePermission = async (req, res) => {
+    try {
+      await removePermission(req.params.id);
+      res.sendStatus(204);
+    } catch (err) {
+      res.status(500).json({ message: "Error removing permission" });
+    }
+  };
+  
+
+
+
+user.model.js-
+import db from "../config/db.config.js";
+
+export const createUser = async ({ name, email, password, role }) => {
+  return db.execute("INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)", [name, email, password, role]);
+};
+
+export const getAllUsers = async () => {
+  return db.execute("SELECT id, name, email, role FROM users WHERE role != 'admin'");
+};
+
+export const deleteUser = async (id) => {
+  return db.execute("DELETE FROM users WHERE id = ?", [id]);
+};
+
+export const getPermissions = async () => {
+  return db.execute(`
+    SELECT p.id, u.name, u.email, p.page FROM permissions p
+    JOIN users u ON p.user_id = u.id
+    WHERE u.role != 'admin'
+  `);
+};
+
+export const setPermission = async (user_id, page) => {
+  return db.execute("INSERT INTO permissions (user_id, page) VALUES (?, ?)", [user_id, page]);
+};
+
+export const removePermission = async (id) => {
+  return db.execute("DELETE FROM permissions WHERE id = ?", [id]);
+};
+
+export const getPagesByUser = async (user_id) => {
+  const [rows] = await db.execute("SELECT page FROM permissions WHERE user_id = ?", [user_id]);
+  return rows.map(r => r.page);
+};
+
+
+
+
+
+user.routes.js-
+import express from "express";
+import {
+  registerUser,
+  listUsers,
+  removeUser,
+  listPermissions,
+  addPermission,
+  deletePermission
+} from "../controllers/user.controller.js";
+
+const router = express.Router();
+
+router.post("/users", registerUser);
+router.get("/users", listUsers);
+router.delete("/users/:id", removeUser);
+
+router.get("/permissions", listPermissions);
+router.post("/permissions", addPermission);
+router.delete("/permissions/:id", deletePermission);
+
+export default router;
+
+
+
+
+
+.env-
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=Infosoft@123
+DB_NAME=afas
+
+
+
+
+
+app.js-
+import express from "express";
+import path from "path";
+import dotenv from "dotenv";
+import cors from "cors";
+import userRoutes from "./routes/user.routes.js";
+import { fileURLToPath } from "url";
+
+dotenv.config();
+const app = express();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+app.use(cors());
+app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
+
+app.use("/api", userRoutes);
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public/html/users.html"));
+});
+
+const PORT = process.env.PORT || 4016;
+app.listen(PORT, () => {
+  console.log(`✅ Users Service running at http://localhost:${PORT}`);
+});
+

@@ -1,119 +1,128 @@
-// frontend-service/public/js/base.js
+// --- Authentication Helper Functions ---
 
-/**
- * Basic logout functionality.
- * In a real application, this would clear tokens/session and redirect to a login page.
- */
+function getToken() {
+    const token = localStorage.getItem('afas_token');
+    return token ? `Bearer ${token}` : null;
+}
+
+function getUser() {
+    const user = localStorage.getItem('afas_user');
+    return user ? JSON.parse(user) : null;
+}
+
 function logout() {
-  console.log("Logout button clicked. Implement actual logout logic.");
-  // Example: Clear local storage, session storage, cookies
-  // localStorage.removeItem('authToken');
-  // sessionStorage.removeItem('userData');
-  alert("Logout functionality placeholder. Redirecting to a hypothetical login page.");
-  // window.location.href = '/login.html'; // Or your actual login page route
+    localStorage.removeItem('afas_token');
+    localStorage.removeItem('afas_user');
+    window.location.href = '/login';
 }
 
 /**
- * Helper function to show a loading message.
- * @param {HTMLElement} element - The DOM element where the loading message should be shown.
- * @param {string} message - The message to display.
+ * ✅ NEW: This is the main function to secure a page and build the UI.
+ * It checks for a valid token and then builds the sidebar based on user role and permissions.
+ * @param {string} currentPage - The identifier for the current page (e.g., 'dashboard', 'users').
  */
-function showLoadingMessage(element, message = "Loading...") {
-  if (element) {
-    element.innerHTML = `<p class="loading-text">${message}</p>`;
-  }
-}
+async function initializePage(currentPage) {
+    const user = getUser();
+    const token = getToken();
 
-/**
- * Helper function to show an error message.
- * @param {HTMLElement} element - The DOM element where the error message should be shown.
- * @param {string} message - The error message to display.
- */
-function showErrorMessage(element, message = "An error occurred.") {
-  if (element) {
-    element.innerHTML = `<p class="error-message">${message}</p>`; // Ensure .error-message is styled
-  }
-}
-
-/**
- * Helper function to show an informational message.
- * @param {HTMLElement} element - The DOM element where the info message should be shown.
- * @param {string} message - The message to display.
- */
-function showInfoMessage(element, message) {
-  if (element) {
-    element.innerHTML = `<p class="info-message">${message}</p>`; // Ensure .info-message is styled
-  }
-}
-
-/**
- * Common function to fetch languages from the Upload Service and populate tab-like buttons.
- * @param {HTMLElement} tabsContainerElement - The container element for the language tabs.
- * @param {function} onTabClickCallback - Callback function to execute when a language tab is clicked. It receives the selected language string.
- * @param {string} initialLoadingText - Text to show while languages are loading.
- */
-async function populateLanguageTabs(tabsContainerElement, onTabClickCallback, initialLoadingText = "Loading languages...") {
-    if (!tabsContainerElement) {
-        console.error("Language tabs container not provided or not found.");
+    // 1. Check for token. If missing, redirect to login immediately.
+    if (!token || !user) {
+        window.location.href = '/login';
         return;
     }
-    showLoadingMessage(tabsContainerElement, initialLoadingText);
 
-    try {
-        const response = await fetch("http://localhost:4003/languages"); // Centralized languages endpoint
-        if (!response.ok) {
-            throw new Error(`Failed to fetch languages: ${response.status} ${response.statusText}`);
-        }
-        const languages = await response.json();
+    // 2. Define all possible sidebar links.
+    const allPages = [
+        { id: 'dashboard', href: '/dashboard', icon: 'fa-tachometer-alt', text: 'Dashboard' },
+        { id: 'upload', href: '/upload', icon: 'fa-upload', text: 'Upload Audio' },
+        { id: 'announcement-type', href: '/announcement-type', icon: 'fa-bullhorn', text: 'Announcement Type' },
+        { id: 'sequence', href: '/sequence', icon: 'fa-list-ol', text: 'Sequence' },
+        { id: 'scheduler', href: '/scheduler', icon: 'fa-calendar-alt', text: 'Scheduler' },
+        { id: 'zones', href: '/zones', icon: 'fa-map-marker-alt', text: 'Zones' },
+        { id: 'users', href: '/users', icon: 'fa-users', text: 'Users' },
+        { id: 'permissions', href: '/permissions', icon: 'fa-user-shield', text: 'Permissions' },
+        { id: 'settings', href: '/settings', icon: 'fa-cog', text: 'Global Settings' },
+        { id: 'tts-utility', href: '/tts-utility', icon: 'fa-microphone-lines', text: 'TTS Utility' },
+        { id: 'logs', href: '/logs', icon: 'fa-history', text: 'System Logs' },
+    ];
 
-        tabsContainerElement.innerHTML = ""; // Clear loading message
+    let permittedPages = [];
 
-        if (!languages || languages.length === 0) {
-            showInfoMessage(tabsContainerElement, "No languages found. Configure languages or upload audio to create them.");
-            // Optionally call the callback with null or an empty state
-            if (typeof onTabClickCallback === 'function') {
-                onTabClickCallback(null);
-            }
+    // 3. Determine which pages the user can see.
+    if (user.role === 'admin') {
+        // Admins can see all pages.
+        permittedPages = allPages.map(p => p.id);
+    } else {
+        // For non-admins, fetch their specific permissions.
+        try {
+            const response = await fetch('http://localhost:4016/api/users/me/permissions', {
+                headers: { 'Authorization': token }
+            });
+            if (response.status === 401) return logout(); // Bad token
+            if (!response.ok) throw new Error('Could not fetch permissions.');
+            
+            const data = await response.json();
+            permittedPages = data.pages || [];
+        } catch (error) {
+            console.error(error);
+            alert("Could not verify your permissions. Logging you out.");
+            logout();
             return;
         }
+    }
 
-        languages.forEach((lang, index) => {
-            const button = document.createElement("button");
-            button.textContent = lang.charAt(0).toUpperCase() + lang.slice(1);
-            button.classList.add("lang-btn"); // Consistent class for all language buttons
-            if (index === 0) {
-                button.classList.add("active");
+    // 4. Check if the user is allowed to be on the current page.
+    // The dashboard is a fallback page everyone is allowed to see.
+    if (currentPage !== 'dashboard' && !permittedPages.includes(currentPage)) {
+        alert("You do not have permission to access this page.");
+        window.location.href = '/dashboard'; // Redirect to a safe page
+        return;
+    }
+    
+    // 5. Build the sidebar dynamically.
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) {
+        // Filter the links the user is allowed to see
+        const linksToRender = allPages.filter(page => permittedPages.includes(page.id));
+        
+        // Clear existing static links and build new ones
+        sidebar.innerHTML = `<h2>AFAS</h2>`; // Keep the title
+        linksToRender.forEach(page => {
+            const link = document.createElement('a');
+            link.href = page.href;
+            link.innerHTML = `<i class="fas ${page.icon} fa-fw"></i> ${page.text}`;
+            if (page.id === currentPage) {
+                link.classList.add('active');
             }
-            button.setAttribute("data-lang", lang);
-
-            button.addEventListener("click", () => {
-                tabsContainerElement.querySelectorAll(".lang-btn.active").forEach(b => b.classList.remove("active"));
-                button.classList.add("active");
-                if (typeof onTabClickCallback === 'function') {
-                    onTabClickCallback(lang);
-                }
-            });
-            tabsContainerElement.appendChild(button);
+            sidebar.appendChild(link);
         });
-
-        // Trigger callback for the initially active language
-        if (languages.length > 0 && typeof onTabClickCallback === 'function') {
-            onTabClickCallback(languages[0]);
-        }
-
-    } catch (err) {
-        console.error("Error populating language tabs:", err);
-        showErrorMessage(tabsContainerElement, "Could not load languages.");
-         if (typeof onTabClickCallback === 'function') {
-            onTabClickCallback(null); // Indicate failure or empty state
-        }
     }
 }
 
-// Make functions available globally if needed, or use ES6 modules if your setup supports it.
-// For simplicity in this multi-file context without a bundler, attaching to window.
+
+// --- UI Helper Functions ---
+function showLoadingMessage(tableBody, message = "Loading...", colSpan = 5) {
+  if (tableBody) {
+    tableBody.innerHTML = `<tr><td colspan="${colSpan}" class="loading-text">${message}</td></tr>`;
+  }
+}
+function showErrorMessage(tableBody, message = "An error occurred.", colSpan = 5) {
+  if (tableBody) {
+    tableBody.innerHTML = `<tr><td colspan="${colSpan}" class="error-message">${message}</td></tr>`;
+  }
+}
+function showInfoMessage(tableBody, message, colSpan = 5) {
+  if (tableBody) {
+    tableBody.innerHTML = `<tr><td colspan="${colSpan}" class="no-data-text">${message}</td></tr>`;
+  }
+}
+
+
+// --- Make functions available globally ---
+window.getToken = getToken;
+window.getUser = getUser;
 window.logout = logout;
-window.populateLanguageTabs = populateLanguageTabs;
+window.initializePage = initializePage; // ✅ Expose the new function
 window.showLoadingMessage = showLoadingMessage;
 window.showErrorMessage = showErrorMessage;
 window.showInfoMessage = showInfoMessage;

@@ -1,15 +1,23 @@
 db.config.js-
 import mysql from "mysql2/promise";
+import dotenv from "dotenv";
+dotenv.config();
 
-const db = await mysql.createPool({
-  host: "localhost",
-  user: "root",
-  password: "Infosoft@123",  
-  database: "afas",
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
+const db = mysql.createPool({
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASSWORD || "Infosoft@123",
+  database: process.env.DB_NAME || "afas",
+  namedPlaceholders: true,
+  rowsAsArray: false,
+  typeCast: function (field, next) {
+    if (field.type === "JSON") {
+      return field.string("utf8"); // ✅ Recommended encoding
+    }
+    return next();
+  },
 });
+
 
 export default db;
 
@@ -19,133 +27,301 @@ export default db;
 
 
 settings.controller.js-
-import { getSettings, saveSettings } from "../models/settings.model.js";
+// settings-service/controllers/settings.controller.js
+import {
+  getSettings as getGlobalSettingsModel,
+  saveSettings as saveGlobalSettingsModel,
+  getFlightSettings as getFlightSettingsModel,
+  saveFlightSettings as saveFlightSettingsModel
+} from "../models/settings.model.js";
 
+// --- Global Settings Controller Functions ---
 export const getConfig = async (req, res) => {
   try {
-    const config = await getSettings();
-
-    if (!config) {
-      return res.status(200).json({
-        languages: { english: true, hindi: false, regional: false },
-        language_order: ["english", "hindi", "regional"],
-        frequency: 1,
-        audio_lag: 2,
-        advance_minutes: 15,
-      });
-    }
-
-    // ✅ config is already parsed in model
+    const config = await getGlobalSettingsModel();
     res.status(200).json(config);
   } catch (err) {
-    res.status(500).json({ message: "Error fetching settings", error: err.message });
+    console.error("Error in getConfig controller:", err.message, err.stack);
+    res.status(500).json({ message: "Error fetching global settings", error: err.message });
   }
 };
 
 export const updateConfig = async (req, res) => {
   try {
-    const body = req.body;
-
-    if (!body.language_order || body.language_order.length === 0) {
-      return res.status(400).json({ message: "Language order is required." });
+    const settingsData = req.body;
+    // Validation for global settings structure
+    if (!settingsData || typeof settingsData.languages !== 'object' || 
+        !Array.isArray(settingsData.language_order) ||
+        (settingsData.regional_language_name !== null && typeof settingsData.regional_language_name !== 'string' && settingsData.regional_language_name !== undefined && settingsData.regional_language_name !== '') || // Allow empty string for "None"
+        typeof settingsData.frequency !== 'number' || 
+        typeof settingsData.audio_lag_minutes !== 'number' || // Check for audio_lag_minutes
+        typeof settingsData.advance_minutes !== 'number') {
+      return res.status(400).json({ message: "Invalid or incomplete global settings data provided. Ensure all fields including audio_lag_minutes are correct." });
+    }
+    if (!settingsData.languages.hasOwnProperty('english') || !settingsData.languages.hasOwnProperty('hindi') || !settingsData.languages.hasOwnProperty('regional_active')){
+        return res.status(400).json({ message: "Global 'languages' object must include 'english', 'hindi', and 'regional_active' flags." });
     }
 
-    await saveSettings(body);
-    res.status(200).json({ message: "Settings saved successfully" });
+    await saveGlobalSettingsModel(settingsData);
+    res.status(200).json({ message: "Global settings saved successfully" });
   } catch (err) {
-    res.status(500).json({ message: "Error saving settings", error: err.message });
+    console.error("Error in updateConfig controller:", err.message, err.stack);
+    res.status(500).json({ message: "Error saving global settings", error: err.message });
+  }
+};
+
+// --- Flight-Specific Settings Controller Functions ---
+export const getFlightConfig = async (req, res) => {
+  try {
+    const { flight_number } = req.params;
+    if (!flight_number) {
+      return res.status(400).json({ message: "Flight number parameter is required." });
+    }
+    const config = await getFlightSettingsModel(flight_number);
+    if (!config) {
+      const globalDefaults = await getGlobalSettingsModel();
+      return res.status(404).json({ 
+          message: "No specific settings found for this flight. Global defaults may apply.",
+          global_regional_language_name: globalDefaults.regional_language_name 
+      });
+    }
+    res.status(200).json(config);
+  } catch (err) {
+    console.error(`Error in getFlightConfig for ${req.params.flight_number}:`, err.message, err.stack);
+    res.status(500).json({ message: "Error fetching flight-specific settings", error: err.message });
+  }
+};
+
+export const updateFlightConfig = async (req, res) => {
+  try {
+    const { flight_number } = req.params;
+    const settingsData = req.body;
+
+    if (!flight_number) {
+      return res.status(400).json({ message: "Flight number parameter is required." });
+    }
+    // Validation for flight-specific settings structure
+    if (!settingsData || typeof settingsData.languages !== 'object' || 
+        !Array.isArray(settingsData.language_order) ||
+        (settingsData.fourth_language_name !== null && typeof settingsData.fourth_language_name !== 'string' && settingsData.fourth_language_name !== undefined && settingsData.fourth_language_name !== '') || // Allow empty string
+        settingsData.frequency === undefined || // Can be null, but must be present
+        settingsData.audio_lag_minutes === undefined ) { // Check for audio_lag_minutes, can be null
+      return res.status(400).json({ message: "Invalid or incomplete flight settings data provided. Ensure all fields including audio_lag_minutes are correct." });
+    }
+     if (!settingsData.languages.hasOwnProperty('english') || 
+         !settingsData.languages.hasOwnProperty('hindi') || 
+         !settingsData.languages.hasOwnProperty('regional_active_for_flight') ||
+         !settingsData.languages.hasOwnProperty('fourth_lang_active')){
+        return res.status(400).json({ message: "Flight 'languages' object must include all required flags (english, hindi, regional_active_for_flight, fourth_lang_active)." });
+    }
+    if (settingsData.language_order.length > 4) {
+        return res.status(400).json({ message: "Language order cannot exceed 4 languages for flight settings."});
+    }
+
+    await saveFlightSettingsModel(flight_number, settingsData);
+    res.status(200).json({ message: `Settings for flight ${flight_number} saved successfully` });
+  } catch (err) {
+    console.error(`Error in updateFlightConfig for ${req.params.flight_number}:`, err.message, err.stack);
+    res.status(500).json({ message: "Error saving flight-specific settings", error: err.message });
   }
 };
 
 
 
 settings.models.js-
+// settings-service/models/settings.model.js
 import db from "../config/db.config.js";
 
+// --- Global Settings ---
 export const getSettings = async () => {
-  const [rows] = await db.execute("SELECT * FROM settings LIMIT 1");
+  const [rows] = await db.execute("SELECT * FROM settings ORDER BY id LIMIT 1");
 
-  if (!rows.length) return null;
+  if (!rows.length) {
+    return {
+      languages: { english: true, hindi: false, regional_active: false },
+      regional_language_name: null,
+      language_order: ["english"],
+      frequency: 1,
+      audio_lag_minutes: 2, // Changed from audio_lag
+      advance_minutes: 15,
+    };
+  }
 
   const row = rows[0];
-
-  // ✅ Only parse if it's a string (MySQL might already parse JSON as object)
-  const languages = typeof row.languages === "string"
-    ? JSON.parse(row.languages)
-    : row.languages;
-
-  const language_order = typeof row.language_order === "string"
-    ? JSON.parse(row.language_order)
-    : row.language_order;
+  const languages = typeof row.languages === 'string' 
+    ? JSON.parse(row.languages) 
+    : (row.languages || { english: true, hindi: false, regional_active: false });
+  const language_order = typeof row.language_order === 'string' 
+    ? JSON.parse(row.language_order) 
+    : (row.language_order || (languages.english ? ['english'] : []));
 
   return {
     languages,
+    regional_language_name: row.regional_language_name,
     language_order,
-    frequency: row.frequency || 1,
-    audio_lag: row.audio_lag || 2,
-    advance_minutes: row.advance_minutes || 15,
+    frequency: row.frequency !== null ? parseInt(row.frequency, 10) : 1,
+    audio_lag_minutes: row.audio_lag_minutes !== null ? parseInt(row.audio_lag_minutes, 10) : 2, // Use audio_lag_minutes
+    advance_minutes: row.advance_minutes !== null ? parseInt(row.advance_minutes, 10) : 15,
   };
 };
 
-export const saveSettings = async ({ languages, language_order, frequency, audio_lag, advance_minutes }) => {
-  const langJson = JSON.stringify(languages);
-  const orderJson = JSON.stringify(language_order);
-
-  console.log("💾 Saving to DB:", {
-    langJson,
-    orderJson,
+export const saveSettings = async (settingsData) => {
+  const {
+    languages,
+    regional_language_name,
+    language_order,
     frequency,
-    audio_lag,
-    advance_minutes,
-  });
+    audio_lag_minutes, // Changed from audio_lag
+    advance_minutes
+  } = settingsData;
 
-  await db.execute("DELETE FROM settings");
-  await db.execute(
-    `INSERT INTO settings (languages, language_order, frequency, audio_lag, advance_minutes)
-     VALUES (?, ?, ?, ?, ?)`,
-    [
-      langJson,
-      orderJson,
-      frequency || 1,
-      audio_lag || 2,
-      advance_minutes || 15,
-    ]
-  );
+  const langJson = JSON.stringify(languages || {});
+  const orderJson = JSON.stringify(language_order || []);
+  const freq = frequency !== undefined ? parseInt(frequency, 10) : 1;
+  const lagMins = audio_lag_minutes !== undefined ? parseInt(audio_lag_minutes, 10) : 2; // Use audio_lag_minutes
+  const advance = advance_minutes !== undefined ? parseInt(advance_minutes, 10) : 15;
+
+  const [existingRows] = await db.execute("SELECT id FROM settings LIMIT 1");
+
+  if (existingRows.length > 0) {
+    const settingId = existingRows[0].id;
+    await db.execute(
+      `UPDATE settings SET languages = ?, regional_language_name = ?, language_order = ?, 
+       frequency = ?, audio_lag_minutes = ?, advance_minutes = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [langJson, regional_language_name, orderJson, freq, lagMins, advance, settingId]
+    );
+  } else {
+    await db.execute(
+      `INSERT INTO settings (languages, regional_language_name, language_order, frequency, audio_lag_minutes, advance_minutes, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`, // Added audio_lag_minutes
+      [langJson, regional_language_name, orderJson, freq, lagMins, advance]
+    );
+  }
+};
+
+// --- Flight-Specific Settings ---
+export const getFlightSettings = async (flightNumber) => {
+  const sql = "SELECT languages, fourth_language_name, language_order, frequency, audio_lag_minutes FROM flight_settings WHERE flight_number = ?"; // Use audio_lag_minutes
+  const [rows] = await db.execute(sql, [flightNumber]);
+
+  if (!rows.length) {
+    return null;
+  }
+
+  const row = rows[0];
+  const languages = typeof row.languages === 'string' ? JSON.parse(row.languages) : row.languages;
+  const language_order = typeof row.language_order === 'string' ? JSON.parse(row.language_order) : row.language_order;
+  
+  const globalSettings = await getSettings();
+
+  return {
+    languages, 
+    fourth_language_name: row.fourth_language_name, 
+    language_order, 
+    frequency: row.frequency, 
+    audio_lag_minutes: row.audio_lag_minutes,   // Use audio_lag_minutes
+    global_regional_language_name: globalSettings.regional_language_name 
+  };
+};
+
+export const saveFlightSettings = async (flightNumber, settingsData) => {
+  const {
+    languages, 
+    fourth_language_name,
+    language_order,
+    frequency,
+    audio_lag_minutes // Changed from audio_lag
+  } = settingsData;
+
+  const langJson = JSON.stringify(languages || {});
+  const orderJson = JSON.stringify(language_order || []);
+  const freqValue = frequency !== undefined ? (frequency === null ? null : parseInt(frequency, 10)) : null;
+  const lagMinsValue = audio_lag_minutes !== undefined ? (audio_lag_minutes === null ? null : parseInt(audio_lag_minutes, 10)) : null; // Use audio_lag_minutes
+
+  const sql = `
+    INSERT INTO flight_settings (flight_number, languages, fourth_language_name, language_order, frequency, audio_lag_minutes, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
+    ON DUPLICATE KEY UPDATE
+      languages = VALUES(languages),
+      fourth_language_name = VALUES(fourth_language_name),
+      language_order = VALUES(language_order),
+      frequency = VALUES(frequency),
+      audio_lag_minutes = VALUES(audio_lag_minutes), 
+      updated_at = NOW()
+  `;
+
+  await db.execute(sql, [
+    flightNumber,
+    langJson,
+    fourth_language_name, 
+    orderJson,
+    freqValue, 
+    lagMinsValue  // Use audio_lag_minutes
+  ]);
 };
 
 
 
 settings.route.js-
+// settings-service/routes/settings.routes.js
 import express from "express";
-import { getConfig, updateConfig } from "../controllers/settings.controller.js";
+import {
+  getConfig,          // For global settings
+  updateConfig,       // For global settings
+  getFlightConfig,    // For flight-specific settings
+  updateFlightConfig  // For flight-specific settings
+} from "../controllers/settings.controller.js";
 
 const router = express.Router();
+
+// --- Routes for Global Application Settings ---
+// GET /settings - Retrieve global settings
 router.get("/", getConfig);
+// POST /settings - Save or update global settings
 router.post("/", updateConfig);
+
+
+// --- Routes for Flight-Specific Settings ---
+// GET /settings/flight/:flight_number - Retrieve settings for a specific flight
+router.get("/flight/:flight_number", getFlightConfig);
+// POST /settings/flight/:flight_number - Save or update settings for a specific flight
+router.post("/flight/:flight_number", updateFlightConfig);
 
 export default router;
 
 
+
 app.js-
+// settings-service/app.js
 import express from "express";
 import dotenv from "dotenv";
-import path from "path";
-import { fileURLToPath } from "url";
 import cors from "cors";
+// import path from "path"; // Only if serving static files from here, which is not typical for a settings microservice
+// import { fileURLToPath } from "url"; // Only if using __dirname for static files
+
 import settingsRoutes from "./routes/settings.routes.js";
 
 dotenv.config();
 const app = express();
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const PORT = process.env.SETTINGS_SERVICE_PORT || 4010; // Use a specific env var for port
+
+// const __filename = fileURLToPath(import.meta.url);
+// const __dirname = path.dirname(__filename);
 
 // Middleware
-app.use(cors({ origin: "*" }));
-app.use(express.json());
-app.use(express.static(path.join(__dirname, "public")));
+app.use(cors({ origin: "*" })); // Configure CORS appropriately for your environment
+app.use(express.json()); // To parse JSON request bodies
+// app.use(express.static(path.join(__dirname, "public"))); // Unlikely needed for a settings API service
 
-// API Routes only
-app.use("/settings", settingsRoutes);
+// API Routes
+app.use("/settings", settingsRoutes); // Base path for all settings related routes
 
-const PORT = process.env.PORT || 4010;
-app.listen(PORT, () => console.log(`⚙️ Settings Service running on http://localhost:${PORT}`));
+// Basic root route for health check or info
+app.get("/", (req, res) => {
+  res.send("Settings Service is running.");
+});
+
+app.listen(PORT, () => {
+  console.log(`⚙️ Settings Service running on http://localhost:${PORT}`);
+});
