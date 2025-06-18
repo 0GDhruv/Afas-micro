@@ -1,0 +1,25 @@
+<h2>Zone → Announcement Type Mapping</h2>
+
+<label for="zoneInput">Enter Zone:</label>
+<input type="text" id="zoneInput" placeholder="e.g. Zone A" />
+
+<label for="announcementDropdown">Select Announcement Type:</label>
+<select id="announcementDropdown"></select>
+
+<button onclick="addZoneMapping()">➕ Add Mapping</button>
+
+<input type="text" id="searchBox" placeholder="Search" />
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Announcement Type</th>
+      <th>Zone</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody id="zoneTableBody"></tbody>
+</table>
+
+<script src="../public/js/zones.js"></script>

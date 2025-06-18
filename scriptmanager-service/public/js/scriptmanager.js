@@ -18,7 +18,7 @@ async function loadLanguages() {
       button.textContent = language.charAt(0).toUpperCase() + language.slice(1);
 
       button.addEventListener("click", () => {
-        document.querySelector(".language-tab.active").classList.remove("active");
+        document.querySelector(".language-tab.active")?.classList.remove("active");
         button.classList.add("active");
         loadAnnouncementTypes(language);
         loadScripts();
@@ -36,46 +36,25 @@ async function loadLanguages() {
   }
 }
 
-// ✅ Fetch transcriptions only when "Get Transcription" button is clicked
-async function getTranscription() {
-  const sequence = document.getElementById("sequence").value.trim();
-  if (!sequence) {
-    alert("⚠️ Please enter a sequence before fetching transcriptions.");
-    return;
-  }
-
-  try {
-    const language = getSelectedLanguage(); // ✅ Get selected language
-    const response = await fetch(`/scriptmanager/transcriptions?sequence=${encodeURIComponent(sequence)}&language=${language}`);
-
-    if (!response.ok) throw new Error("Failed to fetch transcriptions.");
-
-    const data = await response.json();
-    document.getElementById("transcription").value = data.transcriptions.join(" ");
-  } catch (err) {
-    console.error("❌ Error fetching transcription:", err.message);
-  }
-}
-
-// ✅ Add event listener for the "Get Transcription" button
-document.getElementById("get-transcription").addEventListener("click", getTranscription);
-
 // ✅ Get the selected language from active tab
 function getSelectedLanguage() {
-  return document.querySelector(".language-tab.active")?.getAttribute("data-lang") || "";
+  return document.querySelector(".language-tab.active")?.getAttribute("data-lang") || "english"; // Default to English
 }
 
-// ✅ Load Announcement Types based on selected language
+// ✅ Fetch Announcement Types based on Language & Area
 async function loadAnnouncementTypes(language = getSelectedLanguage()) {
-  if (!language) return;
+  const area = document.getElementById("area")?.value;
+  if (!language || !area) return;
+
+  console.log(`🔗 Fetching announcement types for: ${language}, Area: ${area}`);
 
   try {
-    console.log(`🔄 Fetching announcement types for: ${language}`);
-    const response = await fetch(`/announcementtype/types?language=${language}`);
-    if (!response.ok) throw new Error("Failed to fetch announcement types.");
+    const response = await fetch(`/announcementtype/types?language=${encodeURIComponent(language)}&area=${encodeURIComponent(area)}`);
+    
+    if (!response.ok) throw new Error(`Failed to fetch announcement types. Status: ${response.status}`);
 
     const types = await response.json();
-    console.log("✅ Announcement Types:", types);
+    console.log("✅ Fetched announcement types:", types);
 
     const typeDropdown = document.getElementById("announcementType");
     typeDropdown.innerHTML = "<option value='' disabled selected>Select Announcement Type</option>";
@@ -86,60 +65,58 @@ async function loadAnnouncementTypes(language = getSelectedLanguage()) {
       option.textContent = type;
       typeDropdown.appendChild(option);
     });
+
   } catch (err) {
     console.error("❌ Error loading announcement types:", err.message);
   }
 }
 
-async function addOrUpdateScript(e) {
-  e.preventDefault();
-
-  const scriptId = document.getElementById("script-id").value || "";
-  const language = getSelectedLanguage();
-  const announcementType = document.getElementById("announcementType").value;
+// ✅ Fetch transcriptions from Upload Audio Service
+async function getTranscription() {
   const sequence = document.getElementById("sequence").value.trim();
-  const transcription = document.getElementById("transcription").value.trim();
-
-  if (!language || !announcementType || !sequence) {
-    alert("⚠️ All fields are required.");
+  if (!sequence) {
+    alert("⚠️ Please enter a sequence before fetching transcriptions.");
     return;
   }
 
-  const payload = { language, announcementType, sequence, transcription };
-  const method = scriptId ? "PUT" : "POST";
-  const url = scriptId ? `/scriptmanager/scripts/${scriptId}` : "/scriptmanager/scripts";
-
   try {
-    const response = await fetch(url, {
-      method: method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    const language = getSelectedLanguage();
+    console.log(`🔍 Fetching transcription for: ${sequence} in ${language}`);
 
-    if (response.ok) {
-      alert(scriptId ? "✅ Script updated successfully!" : "✅ Script added successfully!");
+    const response = await fetch(`/scriptmanager/transcriptions?sequence=${encodeURIComponent(sequence)}&language=${encodeURIComponent(language)}`);
 
-      // ✅ Reset the form after successful add/edit
-      resetForm();
-
-      // ✅ Immediately refresh table to reflect new script
-      loadScripts();
-    } else {
-      alert("❌ Failed to save script.");
+    if (!response.ok) {
+      throw new Error(`Failed to fetch transcriptions. Status: ${response.status}`);
     }
+
+    const data = await response.json();
+    console.log("✅ Transcription Response:", data);
+
+    document.getElementById("transcription").value = data.transcriptions.join(" ");
   } catch (err) {
-    console.error("❌ Error saving script:", err.message);
+    console.error("❌ Error fetching transcription:", err.message);
+    alert("❌ Failed to fetch transcription.");
   }
 }
 
-// ✅ Load existing scripts for selected language
+// ✅ Attach event listener to "Get Transcription" button
+document.getElementById("get-transcription").addEventListener("click", getTranscription);
+
+
+// ✅ Fetch scripts based on language & area
 async function loadScripts() {
   const language = getSelectedLanguage();
-  if (!language) return;
+  const area = document.getElementById("area")?.value;
+
+  if (!language || !area) {
+    console.warn("🚨 No language or area selected. Skipping API call.");
+    return;
+  }
+
+  console.log(`🔄 Fetching scripts for: ${language}, Area: ${area}`);
 
   try {
-    console.log(`🔄 Fetching scripts for: ${language}`);
-    const response = await fetch(`/scriptmanager/scripts?language=${language}`);
+    const response = await fetch(`/scriptmanager/scripts?language=${encodeURIComponent(language)}&area=${encodeURIComponent(area)}`);
     if (!response.ok) throw new Error("Failed to fetch scripts.");
 
     const scripts = await response.json();
@@ -149,21 +126,10 @@ async function loadScripts() {
     tableBody.innerHTML = "";
 
     scripts.forEach((script, index) => {
-      // ✅ Ensure `announcement_type` exists
-      const announcementType = script.announcement_type
-        ? script.announcement_type.replace(/\s+/g, "").toLowerCase()
-        : "undefined";
-
-      // ✅ Ensure `language` is also properly formatted
-      const scriptLanguage = script.language ? script.language.toLowerCase() : "unknown";
-
-      // ✅ Format as "arrivaldelayed_english"
-      const announcementFormatted = `${announcementType}_${scriptLanguage}`;
-
       const row = `<tr>
         <td>${index + 1}</td>
-        <td>${announcementFormatted}</td> 
-        <td>${Array.isArray(script.sequence) ? script.sequence.join(", ") : "N/A"}</td>
+        <td>${script.announcement_type}</td> 
+        <td>${script.sequence}</td>
         <td>${script.transcription || "N/A"}</td>
         <td>
           <button onclick="editScript(${script.id})">✏️ Edit</button>
@@ -177,8 +143,7 @@ async function loadScripts() {
   }
 }
 
-
-
+// ✅ Edit a script
 async function editScript(id) {
   try {
     console.log(`🔍 Fetching script details for ID: ${id}`);
@@ -189,30 +154,16 @@ async function editScript(id) {
     const script = await response.json();
     console.log("✅ Script loaded:", script);
 
-    // ✅ Ensure form elements exist before setting values
-    const scriptIdField = document.getElementById("script-id");
-    const announcementDropdown = document.getElementById("announcementType");
-    const sequenceInput = document.getElementById("sequence");
-    const transcriptionInput = document.getElementById("transcription");
+    document.getElementById("script-id").value = script.id;
+    document.getElementById("announcementType").value = script.announcement_type;
+    document.getElementById("sequence").value = script.sequence;
+    document.getElementById("transcription").value = script.transcription || "";
 
-    if (!scriptIdField || !announcementDropdown || !sequenceInput || !transcriptionInput) {
-      console.error("❌ Error: One or more form fields are missing.");
-      return;
-    }
-
-    // ✅ Populate form with fetched data
-    scriptIdField.value = script.id;
-    announcementDropdown.value = script.announcement_type;
-    sequenceInput.value = script.sequence.join(", ");
-    transcriptionInput.value = script.transcription || "";
-
-    // ✅ Change button text to indicate editing mode
     document.getElementById("add-script-btn").textContent = "Update Sequence";
   } catch (err) {
     console.error("❌ Error editing script:", err.message);
   }
 }
-
 
 // ✅ Delete a script
 async function deleteScript(id) {
@@ -229,7 +180,13 @@ async function deleteScript(id) {
   }
 }
 
-// ✅ Reset form
+// ✅ Update announcement types when area changes
+document.getElementById("area").addEventListener("change", () => {
+  const language = getSelectedLanguage();
+  loadAnnouncementTypes(language);
+});
+
+// ✅ Reset form fields after adding or updating a script
 function resetForm() {
   document.getElementById("script-id").value = "";
   document.getElementById("announcementType").value = "";
@@ -238,9 +195,50 @@ function resetForm() {
   document.getElementById("add-script-btn").textContent = "Add Sequence";
 }
 
-// ✅ Initialize event listeners
+// ✅ Add or update a script
+async function addOrUpdateScript(e) {
+  e.preventDefault();
+
+  const scriptId = document.getElementById("script-id").value || "";
+  const language = getSelectedLanguage();
+  const announcementType = document.getElementById("announcementType").value;
+  const sequence = document.getElementById("sequence").value.trim();
+  const transcription = document.getElementById("transcription").value.trim();
+  const area = document.getElementById("area").value; // ✅ Added area
+
+  if (!language || !announcementType || !sequence || !area) {
+    alert("⚠️ All fields are required.");
+    return;
+  }
+
+  const payload = { language, announcementType, sequence, transcription, area };
+  const method = scriptId ? "PUT" : "POST";
+  const url = scriptId ? `/scriptmanager/scripts/${scriptId}` : "/scriptmanager/scripts";
+
+  try {
+    const response = await fetch(url, {
+      method: method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (response.ok) {
+      alert(scriptId ? "✅ Script updated successfully!" : "✅ Script added successfully!");
+      resetForm();
+      loadScripts();
+    } else {
+      const errorData = await response.json();
+      console.error("❌ Failed to save script:", errorData);
+      alert("❌ Failed to save script: " + errorData.message);
+    }
+  } catch (err) {
+    console.error("❌ Error saving script:", err.message);
+  }
+}
+
+// ✅ Attach event listener to form submission
 document.getElementById("scriptmanager-form").addEventListener("submit", addOrUpdateScript);
 
-// ✅ Load languages on page load
+// ✅ Initialize Page
 console.log("🔄 Page Loaded: Fetching Languages...");
 loadLanguages();

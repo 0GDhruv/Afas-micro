@@ -7,38 +7,22 @@ import announcementTypeRoutes from "./routes/announcementtype.routes.js";
 import scriptManagerRoutes from "./routes/scriptmanager.routes.js";
 
 dotenv.config();
-
 const app = express();
 const PORT = process.env.PORT || 4006;
 
-// Define __dirname for ES modules
+// Support for __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ✅ Enable CORS for All Routes
-app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST", "DELETE", "PUT", "OPTIONS"],
-  allowedHeaders: ["Content-Type"]
-}));
+// ✅ Enable CORS (required to serve APIs to frontend-service)
+app.use(cors({ origin: "*", methods: ["GET", "POST", "PUT", "DELETE"] }));
 
 // Middleware
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "public")));
 
-// ✅ API Routes
+// API Routes only — no frontend serving now
 app.use("/announcementtype", announcementTypeRoutes);
 app.use("/scriptmanager", scriptManagerRoutes);
-
-// ✅ Serve `announcementtype.html` when visiting `/announcementtype`
-app.get("/announcementtype", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "announcementtype.html"));
-});
-
-// ✅ Serve `scriptmanager.html` when visiting `/scriptmanager`
-app.get("/scriptmanager", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "scriptmanager.html"));
-});
 
 // Start server
 app.listen(PORT, () => {

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Permissions | AFAS</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+  <div class="wrapper">
+    <div class="sidebar">
+      <h2>AFAS</h2>
+      <a href="/dashboard"><i class="fas fa-tachometer-alt fa-fw"></i> Dashboard</a>
+      <a href="/upload"><i class="fas fa-upload fa-fw"></i> Upload Audio</a>
+      <a href="/announcement-type"><i class="fas fa-bullhorn fa-fw"></i> Announcement Type</a>
+      <a href="/sequence"><i class="fas fa-list-ol fa-fw"></i> Sequence</a>
+      <a href="/scheduler"><i class="fas fa-calendar-alt fa-fw"></i> Scheduler</a>
+      <a href="/zones"><i class="fas fa-map-marker-alt fa-fw"></i> Zones</a>
+      <a href="/users"><i class="fas fa-users fa-fw"></i> Users</a>
+      <a href="/permissions" class="active"><i class="fas fa-user-shield fa-fw"></i> Permissions</a>
+      <a href="/settings"><i class="fas fa-cog fa-fw"></i> Global Settings</a>
+      <a href="/tts-utility"><i class="fas fa-microphone-lines fa-fw"></i> TTS Utility</a>
+      <a href="/logs"><i class="fas fa-history fa-fw"></i> System Logs</a>
+    </div>
+
+    <main class="content"> <header> <h1>Manage User Permissions</h1>
+        <button class="logout-btn" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+      </header>
+
+      <section class="form-section">
+        <h2>Assign Page Permission</h2>
+        <form id="permForm">
+          <div class="form-group">
+            <label for="permUserId">User:</label>
+            <select id="permUserId" required>
+                <option value="">-- Select User --</option>
+                </select>
+          </div>
+          <div class="form-group">
+            <label for="permPage">Page:</label>
+            <select id="permPage" required>
+              <option value="">-- Select Page --</option>
+              <option value="dashboard">Dashboard</option>
+              <option value="upload">Upload Audio</option>
+              <option value="announcement-type">Announcement Type</option>
+              <option value="sequence">Sequence</option>
+              <option value="scheduler">Scheduler</option>
+              <option value="zones">Zones</option>
+              <option value="settings">Global Settings</option>
+              <option value="flight-settings">Flight Settings (Access)</option>
+              <option value="tts-utility">TTS Utility</option>
+              <option value="users">User Management</option>
+              <option value="permissions">Permission Management</option>
+            </select>
+          </div>
+          <button type="submit"><i class="fas fa-check-circle"></i> Assign Permission</button>
+        </form>
+      </section>
+
+      <section class="table-section">
+        <h2>Current Permissions</h2>
+        <div id="permTableContainer">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>User Name</th>
+                  <th>User Email</th>
+                  <th>Page Permitted</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="permTableBody">
+                <tr><td colspan="5" class="loading-text">Loading permissions...</td></tr>
+              </tbody>
+            </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="../js/base.js"></script>
+  <script src="../js/permissions.js"></script>
+</body>
+</html>

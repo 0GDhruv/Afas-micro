@@ -1,0 +1,1847 @@
+style.css-
+/* Reset and base styling */
+body, html {
+  margin: 0;
+  padding: 0;
+  font-family: "Segoe UI", sans-serif;
+  background-color: #111;
+  color: #eee;
+  height: 100%;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+button {
+  padding: 8px 12px;
+  background-color: #444;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: #555;
+}
+
+/* Layout */
+.wrapper {
+  display: flex;
+  height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 220px;
+  background-color: #000;
+  padding: 20px 10px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #222;
+}
+
+.sidebar h2 {
+  text-align: center;
+  color: white;
+  font-size: 22px;
+  margin-bottom: 20px;
+}
+
+.sidebar a {
+  padding: 10px;
+  color: #ccc;
+  border-left: 4px solid transparent;
+  margin-bottom: 6px;
+}
+
+.sidebar a:hover,
+.sidebar a.active {
+  background-color: #222;
+  color: white;
+  border-left-color: #0f0;
+}
+
+/* Top header */
+header {
+  height: 50px;
+  background-color: #111;
+  border-bottom: 1px solid #444;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+  position: fixed;
+  top: 0;
+  left: 220px;
+  right: 0;
+  z-index: 1000;
+}
+
+header h1 {
+  font-size: 18px;
+  font-weight: normal;
+}
+
+.logout-btn {
+  background-color: #222;
+  border: 1px solid #555;
+  padding: 6px 12px;
+  border-radius: 4px;
+}
+
+.logout-btn:hover {
+  background-color: #333;
+}
+
+/* Content area */
+.content {
+  flex: 1;
+  padding: 20px;
+  margin-left: 220px;
+  margin-top: 60px;
+  overflow-y: auto;
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+  background-color: #1a1a1a;
+}
+
+th, td {
+  padding: 10px;
+  border: 1px solid #333;
+  text-align: center;
+}
+
+th {
+  background-color: #333;
+  font-weight: bold;
+}
+
+/* Forms */
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+  max-width: 400px;
+}
+
+form input,
+form select,
+form textarea {
+  padding: 8px;
+  background-color: #222;
+  color: #eee;
+  border: 1px solid #555;
+  border-radius: 4px;
+}
+
+form button {
+  width: fit-content;
+}
+
+/* Language Tabs */
+.language-tabs {
+  margin: 15px 0;
+}
+
+.language-tab,
+.lang-tab {
+  background-color: #222;
+  border: 1px solid #444;
+  color: white;
+  padding: 6px 12px;
+  cursor: pointer;
+  margin-right: 8px;
+  border-radius: 4px;
+}
+
+.language-tab.active,
+.lang-tab.active {
+  background-color: #2196f3;
+  border-color: #2196f3;
+}
+
+/* Draggable Language List */
+.draggable-list {
+  list-style: none;
+  padding: 0;
+  border: 1px solid #666;
+  background: #222;
+  color: #fff;
+  width: 200px;
+  margin-bottom: 15px;
+}
+
+.draggable-list li {
+  padding: 8px;
+  border-bottom: 1px solid #444;
+  cursor: move;
+}
+
+.draggable-list li:last-child {
+  border-bottom: none;
+}
+
+/* Time input */
+form input[type="time"] {
+  width: 120px;
+}
+
+/* Form multiple select */
+form select[multiple] {
+  height: 80px;
+}
+
+announcement-type.html-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Announcement Type | AFAS</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <div class="wrapper">
+    <div class="sidebar">
+      <h2>AFAS</h2>
+      <a href="/dashboard">Dashboard</a>
+      <a href="/upload">Upload Audio</a>
+      <a href="/announcement-type" class="active">Announcement Type</a>
+      <a href="/sequence">Sequence</a>
+      <a href="/scheduler">Scheduler</a>
+      <a href="/zones">Zones</a>
+      <a href="/users">Users</a>
+      <a href="/permissions">Permissions</a>
+      <a href="/settings">Settings</a>
+    </div>
+    
+
+    <main class="content">
+      <header>
+        <div>Welcome to AFAS</div>
+        <button onclick="logout()">Logout</button>
+      </header>
+
+      <section>
+        <h2>Manage Announcement Types</h2>
+
+        <label>Select Area</label>
+        <select id="area">
+          <option value="Arrival">Arrival</option>
+          <option value="Departure">Departure</option>
+          <option value="Common">Common</option>
+        </select>
+
+        <div class="language-tabs">
+          <!-- Language buttons dynamically inserted -->
+        </div>
+
+        <form id="announcementtype-form">
+          <label>New Announcement Type</label>
+          <input type="text" id="newType" required />
+          <button type="submit">Add Type</button>
+        </form>
+
+        <h3>Existing Announcement Types</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Language</th>
+              <th>Area</th>
+              <th>Type</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="typesTable">
+            <!-- Dynamically populated -->
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </div>
+
+  <script src="../js/base.js"></script>
+  <script src="../js/announcementtype.js"></script>
+</body>
+</html>
+
+
+dashboard.html-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard | AFAS</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <div class="wrapper">
+    <div class="sidebar">
+      <h2>AFAS</h2>
+      <a href="/dashboard" class="active">Dashboard</a>
+      <a href="/upload">Upload Audio</a>
+      <a href="/announcement-type">Announcement Type</a>
+      <a href="/sequence">Sequence</a>
+      <a href="/scheduler">Scheduler</a>
+      <a href="/zones">Zones</a>
+      <a href="/users">Users</a>
+      <a href="/permissions">Permissions</a>
+      <a href="/settings">Settings</a>
+    </div>
+    
+
+    <main class="content">
+      <header>
+        <h1>Welcome to AFAS</h1>
+        <button onclick="logout()">Logout</button>
+      </header>
+
+      <section>
+        <h2>Active Announcements</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Announcement</th>
+              <th>Status</th>
+              <th>Flight</th>
+              <th>Airline</th>
+              <th>City</th>
+              <th>Gate</th>
+              <th>Time</th>
+              <th>Seq</th>
+            </tr>
+          </thead>
+          <tbody id="announcementTableBody"></tbody>
+        </table>
+      </section>
+    </main>
+  </div>
+
+  <script src="../js/base.js"></script>
+  <script src="../js/dashboard.js"></script>
+</body>
+</html>
+
+
+permissions.html-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AFAS Permissions</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <header class="top-bar">
+    <h1>AFAS Permissions</h1>
+    <button onclick="logout()">Logout</button>
+  </header>
+
+  <div class="sidebar">
+    <h2>AFAS</h2>
+    <a href="/dashboard">Dashboard</a>
+    <a href="/upload">Upload Audio</a>
+    <a href="/announcement-type">Announcement Type</a>
+    <a href="/sequence">Sequence</a>
+    <a href="/scheduler">Scheduler</a>
+    <a href="/zones">Zones</a>
+    <a href="/settings">Settings</a>
+    <a href="/users">Users</a>
+    <a href="/permissions" class="active">Permissions</a>
+  </div>
+
+  <main class="main-content">
+    <h2>Assign Page Permission</h2>
+    <form id="permForm">
+      <label>User:</label>
+      <select id="user_id" required></select>
+
+      <label>Page:</label>
+      <select id="page" required>
+        <option value="dashboard">Dashboard</option>
+        <option value="upload">Upload</option>
+        <option value="announcement-type">Announcement Type</option>
+        <option value="sequence">Sequence</option>
+        <option value="scheduler">Scheduler</option>
+        <option value="zones">Zones</option>
+        <option value="settings">Settings</option>
+        <option value="users">Users</option>
+        <option value="permissions">Permissions</option>
+      </select>
+
+      <button type="submit">Assign Permission</button>
+    </form>
+
+    <h2>Current Permissions</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>User</th>
+          <th>Email</th>
+          <th>Page</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="permTableBody"></tbody>
+    </table>
+  </main>
+
+  <script src="../js/base.js"></script>
+  <script src="../js/permissions.js"></script>
+</body>
+</html>
+
+
+scheduler.html-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AFAS Scheduler</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <header class="top-bar">
+    <h1>AFAS Scheduler</h1>
+    <button onclick="logout()">Logout</button>
+  </header>
+
+  <div class="wrapper">
+    <nav class="sidebar">
+      <h2>AFAS</h2>
+      <a href="/dashboard">Dashboard</a>
+      <a href="/upload">Upload Audio</a>
+      <a href="/announcement-type">Announcement Type</a>
+      <a href="/sequence">Sequence</a>
+      <a href="/scheduler" class="active">Scheduler</a>
+      <a href="/zones">Zones</a>
+      <a href="/users">Users</a>
+      <a href="/permissions">Permissions</a>
+      <a href="/settings">Settings</a>
+    </nav>
+
+    <main class="content">
+      <h2>Schedule Audio Message</h2>
+
+      <form id="scheduler-form">
+        <label>Message Name:</label>
+        <input type="text" id="name" required>
+
+        <label>Language:</label>
+        <select id="language" required></select>
+
+        <label for="audioFile">Audio File:</label>
+        <input type="file" id="audioFile" accept=".mp3,.wav" required />
+
+        <label for="transcription">Transcription (Optional):</label>
+        <input type="text" id="transcription" />
+
+        <label>Start Date:</label>
+        <input type="date" id="start-date" required>
+
+        <label>End Date:</label>
+        <input type="date" id="end-date" required>
+
+        <label>Timings:</label>
+        <div id="timing-container">
+          <input type="time" class="timing-field" />
+        </div>
+        <button type="button" id="add-timing">+ Add Time</button>
+
+        <label>Frequency:</label>
+        <select id="frequency" multiple>
+          <option value="Monday">Monday</option>
+          <option value="Tuesday">Tuesday</option>
+          <option value="Wednesday">Wednesday</option>
+          <option value="Thursday">Thursday</option>
+          <option value="Friday">Friday</option>
+          <option value="Saturday">Saturday</option>
+          <option value="Sunday">Sunday</option>
+        </select>
+
+        <br>
+        <button type="submit">📅 Schedule</button>
+      </form>
+
+      <h3>Scheduled Messages</h3>
+
+<input type="text" id="search-box" placeholder="🔍 Search by name..." />
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Name</th>
+      <th>Audio</th>
+      <th>Timings</th>
+      <th>Date Range</th>
+      <th>Frequency</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody id="schedule-table">
+    <tr><td colspan="7">Loading...</td></tr>
+  </tbody>
+</table>
+    </main>
+  </div>
+
+  <script src="../js/base.js"></script>
+  <script src="../js/scheduler.js"></script>
+</body>
+</html>
+
+
+
+sequence.html-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sequence | AFAS</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <div class="wrapper">
+    <div class="sidebar">
+      <h2>AFAS</h2>
+      <a href="/dashboard">Dashboard</a>
+      <a href="/upload">Upload Audio</a>
+      <a href="/announcement-type">Announcement Type</a>
+      <a href="/sequence" class="active">Sequence</a>
+      <a href="/scheduler">Scheduler</a>
+      <a href="/zones">Zones</a>
+      <a href="/users">Users</a>
+      <a href="/permissions">Permissions</a>
+      <a href="/settings">Settings</a>
+    </div>
+
+    <main class="content">
+      <header>
+        <div>Welcome to AFAS</div>
+        <button onclick="logout()">Logout</button>
+      </header>
+
+      <section>
+        <h2>Manage Script Sequences</h2>
+
+        <label>Select Area</label>
+        <select id="area">
+          <option value="Arrival">Arrival</option>
+          <option value="Departure">Departure</option>
+          <option value="Common">Common</option>
+        </select>
+
+        <div class="language-tabs"></div>
+
+        <form id="scriptmanager-form">
+          <input type="hidden" id="script-id" />
+
+          <label>Announcement Type</label>
+          <select id="announcementType" required></select>
+
+          <label>Sequence *</label>
+          <input type="text" id="sequence" required />
+
+          <button type="button" id="get-transcription">Get Transcription</button>
+
+          <label>Transcription</label>
+          <textarea id="transcription" disabled></textarea>
+
+          <button type="submit" id="add-script-btn">Add Sequence</button>
+        </form>
+
+        <h3>Existing Sequences</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Type</th>
+              <th>Sequence</th>
+              <th>Transcription</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="scriptsTable"></tbody>
+        </table>
+      </section>
+    </main>
+  </div>
+
+  <script src="../js/base.js"></script>
+  <script src="../js/sequence.js"></script>
+</body>
+</html>
+
+
+
+settings.html-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AFAS Settings</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <div class="wrapper">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <h2>AFAS</h2>
+      <a href="/dashboard">Dashboard</a>
+      <a href="/upload">Upload Audio</a>
+      <a href="/announcement-type">Announcement Type</a>
+      <a href="/sequence">Sequence</a>
+      <a href="/scheduler">Scheduler</a>
+      <a href="/zones">Zones</a>
+      <a href="/users">Users</a>
+      <a href="/permissions">Permissions</a>
+      <a href="/settings" class="active">Settings</a>
+    </div>
+
+    <!-- Main Content -->
+    <div class="content">
+      <header>
+        <h1>AFAS Settings</h1>
+        <button onclick="logout()">Logout</button>
+      </header>
+
+      <h2>Configure Settings</h2>
+
+      <label>Languages:</label><br />
+      <input type="checkbox" id="english"> English
+      <input type="checkbox" id="hindi"> Hindi
+      <input type="checkbox" id="regional"> Regional
+      <br><br>
+
+      <label>Language Order (drag to reorder):</label>
+      <ul id="language-order" class="draggable-list"></ul>
+
+      <label>Frequency (1–5):</label>
+      <input type="number" id="frequency" min="1" max="5" />
+
+      <label>Audio Lag (seconds):</label>
+      <select id="audio-lag"></select>
+
+      <label>Advance Time (minutes before ETD/ETA):</label>
+      <input type="number" id="advance-time" min="1" />
+
+      <br><br>
+      <button id="save-button">Save</button>
+    </div>
+  </div>
+
+  <script src="../js/base.js"></script>
+  <script src="../js/settings.js"></script>
+  <script>
+    // populate audio lag options 1–10
+    const lagDropdown = document.getElementById("audio-lag");
+    for (let i = 1; i <= 10; i++) {
+      const opt = document.createElement("option");
+      opt.value = i;
+      opt.textContent = i;
+      lagDropdown.appendChild(opt);
+    }
+  </script>
+</body>
+</html>
+
+
+
+
+upload.html-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Upload Audio | AFAS</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <script defer src="../js/upload.js"></script>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="sidebar">
+      <h2>AFAS</h2>
+      <a href="/dashboard">Dashboard</a>
+      <a href="/upload" class="active">Upload Audio</a>
+      <a href="/announcement-type">Announcement Type</a>
+      <a href="/sequence">Sequence</a>
+      <a href="/scheduler">Scheduler</a>
+      <a href="/zones">Zones</a>
+      <a href="/users">Users</a>
+      <a href="/permissions">Permissions</a>
+      <a href="/settings">Settings</a>
+    </div>
+
+    <!-- Main -->
+    <div class="content">
+      <header>
+        <h1>Upload Audio</h1>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+      </header>
+
+      <!-- Language Tabs -->
+      <div class="language-tabs">
+        <button class="language-tab active" data-lang="english">English</button>
+        <button class="language-tab" data-lang="hindi">Hindi</button>
+        <button class="language-tab" data-lang="regional">Regional</button>
+        <button class="language-tab" data-lang="temp">Temp</button>
+      </div>
+
+      <!-- Upload Form -->
+      <form id="upload-form">
+        <label for="audioType">Audio Type:</label>
+        <select id="audioType" required>
+          <option value="specialmessage">Special Message</option>
+          <option value="std">Standard</option>
+          <option value="number">Number</option>
+          <option value="city">City</option>
+          <option value="airline">Airline</option>
+        </select>
+
+        <label for="audioFile">Audio File:</label>
+        <input type="file" id="audioFile" accept=".mp3,.wav" required />
+
+        <label for="transcription">Transcription:</label>
+        <input type="text" id="transcription" placeholder="Transcribed text" />
+
+        <label for="remarks">Remarks:</label>
+        <input type="text" id="remarks" placeholder="Remarks (optional)" />
+
+        <button type="submit">Upload</button>
+      </form>
+
+      <!-- Search -->
+      <input type="text" id="searchBox" placeholder="Search audio..." />
+
+      <!-- Audio Table -->
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Filename</th>
+            <th>Transcription</th>
+            <th>Remarks</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="audio-table"></tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>
+
+
+
+
+users.html-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AFAS Users</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <header class="top-bar">
+      <h1>AFAS Users</h1>
+      <button onclick="logout()">Logout</button>
+    </header>
+  
+    <!-- ✅ Wrap both sidebar + main content -->
+    <div class="wrapper">
+  
+      <div class="sidebar">
+        <h2>AFAS</h2>
+        <a href="/dashboard">Dashboard</a>
+        <a href="/upload">Upload Audio</a>
+        <a href="/announcement-type">Announcement Type</a>
+        <a href="/sequence">Sequence</a>
+        <a href="/scheduler">Scheduler</a>
+        <a href="/zones">Zones</a>
+        <a href="/users" class="active">Users</a>
+        <a href="/permissions">Permissions</a>
+        <a href="/settings">Settings</a>
+      </div>
+  
+      <main class="main-content">
+        <h2>Create New User</h2>
+        <form id="userForm">
+          <label>Name:</label>
+          <input type="text" id="name" required>
+  
+          <label>Email:</label>
+          <input type="email" id="email" required>
+  
+          <label>Password:</label>
+          <input type="password" id="password" required>
+  
+          <label>Role:</label>
+          <select id="role" required>
+            <option value="user">User</option>
+            <option value="viewer">Viewer</option>
+          </select>
+  
+          <button type="submit">Create User</button>
+        </form>
+  
+        <h2>All Users</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="usersTableBody"></tbody>
+        </table>
+      </main>
+    </div> <!-- 👈 end wrapper -->
+  
+    <script src="../js/base.js"></script>
+    <script src="../js/users.js"></script>
+  </body>
+  
+</html>
+
+
+
+
+zones.html-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AFAS Zones</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <div class="wrapper">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <h2>AFAS</h2>
+      <a href="/dashboard">Dashboard</a>
+      <a href="/upload">Upload Audio</a>
+      <a href="/announcement-type">Announcement Type</a>
+      <a href="/sequence">Sequence</a>
+      <a href="/scheduler">Scheduler</a>
+      <a href="/zones" class="active">Zones</a>
+      <a href="/users">Users</a>
+      <a href="/permissions">Permissions</a>
+      <a href="/settings">Settings</a>
+    </div>
+
+    <!-- Main Content -->
+    <div class="content">
+      <header>
+        <h1>AFAS Zones</h1>
+        <button onclick="logout()">Logout</button>
+      </header>
+
+      <h2>Zone → Announcement Type Mapping</h2>
+
+      <label for="zoneInput">Enter Zone:</label>
+      <input type="text" id="zoneInput" placeholder="e.g. Zone A" />
+
+      <label for="announcementDropdown">Select Announcement Type:</label>
+      <select id="announcementDropdown"></select>
+
+      <button onclick="addZoneMapping()">➕ Add Mapping</button>
+
+      <input type="text" id="searchBox" placeholder="Search..." />
+
+      <table>
+        <thead>
+          <tr>
+            <th>SR.NO</th>
+            <th>Announcement Type</th>
+            <th>Zone</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="zoneTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="../js/base.js"></script>
+  <script src="../js/zones.js"></script>
+</body>
+</html>
+
+
+
+announcementtype.js-
+async function loadLanguages() {
+    try {
+      const response = await fetch("http://localhost:4003/languages");
+      const languages = await response.json();
+  
+      const tabs = document.querySelector(".language-tabs");
+      tabs.innerHTML = "";
+  
+      languages.forEach((lang, i) => {
+        const btn = document.createElement("button");
+        btn.textContent = lang;
+        btn.classList.add("lang-btn");
+        if (i === 0) btn.classList.add("active");
+        btn.setAttribute("data-lang", lang);
+  
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".lang-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          loadAnnouncementTypes(lang);
+        });
+  
+        tabs.appendChild(btn);
+      });
+  
+      if (languages.length > 0) loadAnnouncementTypes(languages[0]);
+    } catch (err) {
+      console.error("Failed to load languages:", err);
+    }
+  }
+  
+  async function loadAnnouncementTypes(language) {
+    const area = document.getElementById("area").value;
+    if (!language || !area) return;
+  
+    try {
+      const res = await fetch(`http://localhost:4006/announcementtype/types?language=${language}&area=${area}`);
+      const types = await res.json();
+      const table = document.getElementById("typesTable");
+      table.innerHTML = "";
+  
+      types.forEach((type, i) => {
+        table.innerHTML += `
+          <tr>
+            <td>${i + 1}</td>
+            <td>${language}</td>
+            <td>${area}</td>
+            <td>${type}</td>
+            <td><button onclick="deleteType('${type}', '${language}', '${area}')">🗑</button></td>
+          </tr>
+        `;
+      });
+    } catch (err) {
+      console.error("Error loading types:", err);
+    }
+  }
+  
+  document.getElementById("announcementtype-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const type = document.getElementById("newType").value.trim();
+    const area = document.getElementById("area").value;
+    const language = document.querySelector(".lang-btn.active")?.getAttribute("data-lang");
+  
+    if (!type || !area || !language) return alert("All fields required");
+  
+    try {
+      const res = await fetch("http://localhost:4006/announcementtype/types", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, language, area })
+      });
+  
+      if (res.ok) {
+        alert("Added successfully");
+        document.getElementById("newType").value = "";
+        loadAnnouncementTypes(language);
+      }
+    } catch (err) {
+      console.error("Failed to add:", err);
+    }
+  });
+  
+  async function deleteType(type, language, area) {
+    if (!confirm(`Delete ${type}?`)) return;
+  
+    try {
+      const res = await fetch(`http://localhost:4006/announcementtype/types/${type}?language=${language}&area=${area}`, {
+        method: "DELETE"
+      });
+  
+      if (res.ok) {
+        alert("Deleted");
+        loadAnnouncementTypes(language);
+      }
+    } catch (err) {
+      console.error("Failed to delete:", err);
+    }
+  }
+  
+  document.getElementById("area").addEventListener("change", () => {
+    const lang = document.querySelector(".lang-btn.active")?.getAttribute("data-lang");
+    if (lang) loadAnnouncementTypes(lang);
+  });
+  
+  window.onload = loadLanguages;
+  
+
+dashboard.js-
+window.onload = async () => {
+    try {
+      const response = await fetch("http://localhost:4005/playlist/active");
+      const data = await response.json();
+      const tbody = document.getElementById("announcementTableBody");
+      tbody.innerHTML = "";
+  
+      data.forEach((item, i) => {
+        const row = `<tr>
+          <td>${i + 1}</td>
+          <td>${item.announcement_name}</td>
+          <td>${item.status}</td>
+          <td>${item.flight_code}</td>
+          <td>${item.airline_name}</td>
+          <td>${item.city_name}</td>
+          <td>${item.gate_number}</td>
+          <td>${item.time}</td>
+          <td>${item.sequence}</td>
+        </tr>`;
+        tbody.innerHTML += row;
+      });
+    } catch (error) {
+      console.error("Error fetching active announcements:", error);
+    }
+  };
+  
+
+permessions.js-
+const API_BASE = "http://localhost:4016/api";
+
+// Load permissions
+async function loadPermissions() {
+  try {
+    const res = await fetch(`${API_BASE}/permissions`);
+    const permissions = await res.json();
+    const tbody = document.getElementById("permTableBody");
+    tbody.innerHTML = "";
+
+    permissions.forEach((perm, i) => {
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${i + 1}</td>
+        <td>${perm.name}</td>
+        <td>${perm.email}</td>
+        <td>${perm.page}</td>
+        <td><button onclick="removePermission(${perm.id})">Delete</button></td>
+      `;
+      tbody.appendChild(row);
+    });
+  } catch (err) {
+    console.error("❌ Failed to load permissions:", err.message);
+  }
+}
+
+// Add permission
+document.getElementById("permForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const userId = document.getElementById("user_id").value;
+  const page = document.getElementById("page").value;
+
+  if (!userId || !page) {
+    alert("Select user and page.");
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/permissions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: userId, page }),
+    });
+
+    if (!res.ok) throw new Error("Failed to add permission.");
+    alert("✅ Permission added!");
+    document.getElementById("permForm").reset();
+    loadPermissions();
+  } catch (err) {
+    console.error("❌ Error adding permission:", err.message);
+  }
+});
+
+// Remove permission
+async function removePermission(id) {
+  if (!confirm("Delete this permission?")) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/permissions/${id}`, { method: "DELETE" });
+    if (res.ok) loadPermissions();
+    else alert("❌ Failed to delete permission.");
+  } catch (err) {
+    console.error("❌ Error deleting permission:", err.message);
+  }
+}
+
+window.onload = loadPermissions;
+
+
+scheduler.js-
+let allSchedules = [];
+
+async function loadLanguages() {
+  try {
+    const res = await fetch("http://localhost:4004/scheduler/languages");
+    const langs = await res.json();
+    const dropdown = document.getElementById("language");
+    dropdown.innerHTML = `<option value="">Select Language</option>`;
+    langs.forEach(l => {
+      const opt = document.createElement("option");
+      opt.value = l;
+      opt.textContent = l.charAt(0).toUpperCase() + l.slice(1);
+      dropdown.appendChild(opt);
+    });
+  } catch (err) {
+    console.error("❌ Error loading languages:", err.message);
+  }
+}
+
+document.getElementById("language").addEventListener("change", () => {
+  document.getElementById("audioFile").disabled = false;
+});
+
+document.getElementById("add-timing").addEventListener("click", () => {
+  const container = document.getElementById("timing-container");
+  const input = document.createElement("input");
+  input.type = "time";
+  input.className = "timing-field";
+  container.appendChild(input);
+});
+
+document.getElementById("scheduler-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const id = document.getElementById("edit-id").value;
+  const name = document.getElementById("name").value;
+  const language = document.getElementById("language").value;
+  const fileInput = document.getElementById("audioFile");
+  const timings = Array.from(document.querySelectorAll(".timing-field")).map(i => i.value);
+  const startDate = document.getElementById("start-date").value;
+  const endDate = document.getElementById("end-date").value;
+  const frequency = Array.from(document.getElementById("frequency").selectedOptions).map(opt => opt.value);
+
+  const formData = new FormData();
+  formData.append("name", name);
+  formData.append("language", language);
+  formData.append("timings", JSON.stringify(timings));
+  formData.append("start_date", startDate);
+  formData.append("end_date", endDate);
+  formData.append("frequency", JSON.stringify(frequency));
+  if (fileInput.files.length) {
+    formData.append("audio", fileInput.files[0]);
+  }
+
+  const url = id ? `http://localhost:4004/scheduler/${id}` : "http://localhost:4004/scheduler";
+  const method = id ? "PUT" : "POST";
+
+  try {
+    const res = await fetch(url, { method, body: formData });
+    if (res.ok) {
+      alert("✅ Schedule saved!");
+      document.getElementById("scheduler-form").reset();
+      document.getElementById("timing-container").innerHTML = "<input type='time' class='timing-field' />";
+      document.getElementById("edit-id").value = "";
+      loadSchedules();
+    } else {
+      const err = await res.json();
+      alert("❌ Failed to save: " + (err.message || "Unknown error"));
+    }
+  } catch (err) {
+    console.error("❌ Error saving schedule:", err.message);
+    alert("Server error. Check logs.");
+  }
+});
+
+function populateEditForm(schedule) {
+  document.getElementById("edit-id").value = schedule.id;
+  document.getElementById("name").value = schedule.name;
+  document.getElementById("language").value = schedule.language;
+
+  document.getElementById("start-date").value = schedule.start_date;
+  document.getElementById("end-date").value = schedule.end_date;
+
+  const timingContainer = document.getElementById("timing-container");
+  timingContainer.innerHTML = "";
+  const timings = Array.isArray(schedule.timing) ? schedule.timing : JSON.parse(schedule.timing || "[]");
+  timings.forEach(time => {
+    const input = document.createElement("input");
+    input.type = "time";
+    input.className = "timing-field";
+    input.value = time;
+    timingContainer.appendChild(input);
+  });
+
+  const freq = Array.isArray(schedule.frequency) ? schedule.frequency : (schedule.frequency || "").split(",");
+  const freqSelect = document.getElementById("frequency");
+  Array.from(freqSelect.options).forEach(opt => {
+    opt.selected = freq.includes(opt.value);
+  });
+}
+
+async function loadSchedules() {
+  const table = document.getElementById("schedule-table");
+  try {
+    const res = await fetch("http://localhost:4004/scheduler");
+    const schedules = await res.json();
+    allSchedules = schedules;
+    renderScheduleTable(schedules);
+  } catch (err) {
+    table.innerHTML = `<tr><td colspan="7">❌ Failed to load schedules</td></tr>`;
+  }
+}
+
+function renderScheduleTable(data) {
+  const table = document.getElementById("schedule-table");
+  table.innerHTML = "";
+
+  data.forEach((s, i) => {
+    const timings = Array.isArray(s.timing) ? s.timing : JSON.parse(s.timing || "[]");
+    const freq = Array.isArray(s.frequency) ? s.frequency : (s.frequency || "").split(",");
+
+    const row = `<tr>
+      <td>${i + 1}</td>
+      <td>${s.name}</td>
+      <td>${s.audioId || "-"}</td>
+      <td>${timings.join(", ")}</td>
+      <td>${s.start_date} → ${s.end_date}</td>
+      <td>${freq.join(", ")}</td>
+      <td>
+        <button onclick="populateEditForm(${JSON.stringify(s).replace(/"/g, '&quot;')})">✏️</button>
+        <button onclick="deleteSchedule(${s.id})">🗑️</button>
+      </td>
+    </tr>`;
+    table.innerHTML += row;
+  });
+}
+
+async function deleteSchedule(id) {
+  if (!confirm("Delete this schedule?")) return;
+  try {
+    const res = await fetch(`http://localhost:4004/scheduler/${id}`, { method: "DELETE" });
+    if (res.ok) {
+      alert("✅ Deleted");
+      loadSchedules();
+    } else {
+      alert("❌ Failed to delete");
+    }
+  } catch (err) {
+    console.error("❌ Delete failed:", err.message);
+  }
+}
+
+document.getElementById("search-box").addEventListener("input", (e) => {
+  const q = e.target.value.toLowerCase();
+  const filtered = allSchedules.filter(s => s.name?.toLowerCase().includes(q));
+  renderScheduleTable(filtered);
+});
+
+window.onload = () => {
+  loadLanguages();
+  loadSchedules();
+};
+
+
+
+sequence.js-
+async function loadLanguages() {
+    try {
+      const res = await fetch("http://localhost:4003/languages");
+      const langs = await res.json();
+  
+      const tabContainer = document.querySelector(".language-tabs");
+      tabContainer.innerHTML = "";
+  
+      langs.forEach((lang, i) => {
+        const btn = document.createElement("button");
+        btn.textContent = lang;
+        btn.className = `lang-btn ${i === 0 ? "active" : ""}`;
+        btn.dataset.lang = lang;
+  
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".lang-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          loadAnnouncementTypes(lang);
+          loadScripts(lang);
+        });
+  
+        tabContainer.appendChild(btn);
+      });
+  
+      if (langs.length > 0) {
+        loadAnnouncementTypes(langs[0]);
+        loadScripts(langs[0]);
+      }
+    } catch (err) {
+      console.error("Failed to load languages:", err);
+    }
+  }
+  
+  function getSelectedLanguage() {
+    return document.querySelector(".lang-btn.active")?.dataset.lang;
+  }
+  
+  async function loadAnnouncementTypes(language) {
+    const area = document.getElementById("area").value;
+    if (!language || !area) return;
+  
+    try {
+      const res = await fetch(`http://localhost:4006/announcementtype/types?language=${language}&area=${area}`);
+      const types = await res.json();
+  
+      const dropdown = document.getElementById("announcementType");
+      dropdown.innerHTML = `<option value="">Select Type</option>`;
+      types.forEach(type => {
+        const opt = document.createElement("option");
+        opt.value = type;
+        opt.textContent = type;
+        dropdown.appendChild(opt);
+      });
+    } catch (err) {
+      console.error("Failed to load types:", err);
+    }
+  }
+  
+  async function loadScripts(language = getSelectedLanguage()) {
+    const area = document.getElementById("area").value;
+    if (!language || !area) return;
+  
+    try {
+      const res = await fetch(`http://localhost:4006/scriptmanager/scripts?language=${language}&area=${area}`);
+      const data = await res.json();
+      const table = document.getElementById("scriptsTable");
+      table.innerHTML = "";
+  
+      data.forEach((row, i) => {
+        table.innerHTML += `
+          <tr>
+            <td>${i + 1}</td>
+            <td>${row.announcement_type}</td>
+            <td>${row.sequence}</td>
+            <td>${row.transcription || ""}</td>
+            <td>
+              <button onclick="editScript(${row.id})">✏️</button>
+              <button onclick="deleteScript(${row.id})">🗑</button>
+            </td>
+          </tr>
+        `;
+      });
+    } catch (err) {
+      console.error("Failed to load scripts:", err);
+    }
+  }
+  
+  document.getElementById("get-transcription").addEventListener("click", async () => {
+    const sequence = document.getElementById("sequence").value.trim();
+    const language = getSelectedLanguage();
+    if (!sequence || !language) return;
+  
+    try {
+      const res = await fetch(`http://localhost:4006/scriptmanager/transcriptions?sequence=${sequence}&language=${language}`);
+      const data = await res.json();
+      document.getElementById("transcription").value = data.transcriptions.join(" ");
+    } catch (err) {
+      console.error("Failed to fetch transcription:", err);
+    }
+  });
+  
+  document.getElementById("scriptmanager-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+  
+    const id = document.getElementById("script-id").value;
+    const announcementType = document.getElementById("announcementType").value;
+    const sequence = document.getElementById("sequence").value;
+    const transcription = document.getElementById("transcription").value;
+    const area = document.getElementById("area").value;
+    const language = getSelectedLanguage();
+  
+    if (!language || !announcementType || !sequence || !area) return alert("Please fill all fields");
+  
+    const payload = { language, announcementType, sequence, transcription, area };
+    const method = id ? "PUT" : "POST";
+    const url = `http://localhost:4006/scriptmanager/scripts${id ? `/${id}` : ""}`;
+  
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+  
+      if (res.ok) {
+        alert(id ? "Updated" : "Added");
+        resetForm();
+        loadScripts(language);
+      }
+    } catch (err) {
+      console.error("Save failed:", err);
+    }
+  });
+  
+  function resetForm() {
+    document.getElementById("script-id").value = "";
+    document.getElementById("sequence").value = "";
+    document.getElementById("transcription").value = "";
+    document.getElementById("announcementType").value = "";
+    document.getElementById("add-script-btn").textContent = "Add Sequence";
+  }
+  
+  async function editScript(id) {
+    try {
+      const res = await fetch(`http://localhost:4006/scriptmanager/scripts/${id}`);
+      const script = await res.json();
+  
+      document.getElementById("script-id").value = script.id;
+      document.getElementById("announcementType").value = script.announcement_type;
+      document.getElementById("sequence").value = script.sequence;
+      document.getElementById("transcription").value = script.transcription || "";
+      document.getElementById("add-script-btn").textContent = "Update Sequence";
+    } catch (err) {
+      console.error("Error editing script:", err);
+    }
+  }
+  
+  async function deleteScript(id) {
+    if (!confirm("Delete this sequence?")) return;
+  
+    try {
+      await fetch(`http://localhost:4006/scriptmanager/scripts/${id}`, { method: "DELETE" });
+      loadScripts(getSelectedLanguage());
+    } catch (err) {
+      console.error("Delete failed:", err);
+    }
+  }
+  
+  document.getElementById("area").addEventListener("change", () => {
+    const lang = getSelectedLanguage();
+    if (lang) {
+      loadAnnouncementTypes(lang);
+      loadScripts(lang);
+    }
+  });
+  
+  window.onload = loadLanguages;
+  
+
+
+
+settings.js-
+const orderList = document.getElementById("language-order");
+
+function createLanguageItem(lang) {
+  const li = document.createElement("li");
+  li.textContent = lang;
+  li.draggable = true;
+
+  li.ondragstart = e => e.dataTransfer.setData("text/plain", e.target.textContent);
+  li.ondragover = e => e.preventDefault();
+  li.ondrop = e => {
+    e.preventDefault();
+    const dragged = e.dataTransfer.getData("text/plain");
+    const draggedItem = [...orderList.children].find(li => li.textContent === dragged);
+    if (draggedItem && draggedItem !== e.target) {
+      orderList.insertBefore(draggedItem, e.target);
+    }
+  };
+
+  orderList.appendChild(li);
+}
+
+async function loadSettings() {
+  try {
+    const res = await fetch("http://localhost:4010/settings");
+    const data = await res.json();
+
+    document.getElementById("english").checked = data.languages.english;
+    document.getElementById("hindi").checked = data.languages.hindi;
+    document.getElementById("regional").checked = data.languages.regional;
+
+    orderList.innerHTML = "";
+    data.language_order.forEach(createLanguageItem);
+
+    document.getElementById("frequency").value = data.frequency;
+    document.getElementById("audio-lag").value = data.audio_lag;
+    document.getElementById("advance-time").value = data.advance_minutes;
+  } catch (err) {
+    console.error("Error loading settings:", err.message);
+    alert("Failed to load settings.");
+  }
+}
+
+async function saveSettings() {
+  const languages = {
+    english: document.getElementById("english").checked,
+    hindi: document.getElementById("hindi").checked,
+    regional: document.getElementById("regional").checked,
+  };
+
+  const language_order = [...orderList.children].map(li => li.textContent);
+  const frequency = parseInt(document.getElementById("frequency").value);
+  const audio_lag = parseInt(document.getElementById("audio-lag").value);
+  const advance_minutes = parseInt(document.getElementById("advance-time").value);
+
+  try {
+    const res = await fetch("http://localhost:4010/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ languages, language_order, frequency, audio_lag, advance_minutes }),
+    });
+
+    const result = await res.json();
+    alert(result.message || "Settings saved.");
+  } catch (err) {
+    console.error("❌ Error saving settings:", err.message);
+    alert("Failed to save settings.");
+  }
+}
+
+document.getElementById("save-button").addEventListener("click", saveSettings);
+window.onload = loadSettings;
+
+
+
+
+upload.js-
+document.addEventListener("DOMContentLoaded", () => {
+  const uploadForm = document.getElementById("upload-form");
+  const tabsContainer = document.querySelector(".language-tabs");
+  const tableBody = document.getElementById("audio-table");
+  const searchBox = document.getElementById("searchBox");
+
+  let allAudios = [];
+
+  uploadForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const language = getSelectedLanguage();
+    const audioType = document.getElementById("audioType").value;
+    const fileInput = document.getElementById("audioFile");
+    const transcription = document.getElementById("transcription").value.trim();
+    const remarks = document.getElementById("remarks").value.trim();
+
+    if (!fileInput.files.length) return alert("⚠️ Please select an audio file to upload.");
+
+    const formData = new FormData();
+    formData.append("audio", fileInput.files[0]);
+    formData.append("language", language);
+    formData.append("audioType", audioType);
+    formData.append("transcription", transcription);
+    formData.append("remarks", remarks);
+
+    try {
+      const response = await fetch("http://localhost:4003/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error(`Upload failed. Status: ${response.status}`);
+      alert("✅ Audio uploaded successfully!");
+      loadAudios();
+    } catch (err) {
+      console.error("❌ Error uploading audio:", err.message);
+      alert("❌ Failed to upload audio.");
+    }
+  });
+
+  async function loadLanguages() {
+    try {
+      const response = await fetch("http://localhost:4003/languages");
+      if (!response.ok) throw new Error("Failed to fetch languages.");
+      const languages = await response.json();
+      tabsContainer.innerHTML = "";
+
+      languages.forEach((lang, index) => {
+        const button = document.createElement("button");
+        button.className = "language-tab" + (index === 0 ? " active" : "");
+        button.setAttribute("data-lang", lang);
+        button.textContent = lang.charAt(0).toUpperCase() + lang.slice(1);
+        button.addEventListener("click", () => {
+          document.querySelector(".language-tab.active")?.classList.remove("active");
+          button.classList.add("active");
+          loadAudios();
+        });
+        tabsContainer.appendChild(button);
+      });
+
+      if (tabsContainer.firstChild) loadAudios();
+    } catch (err) {
+      console.error("❌ Error loading languages:", err.message);
+    }
+  }
+
+  async function loadAudios() {
+    const language = getSelectedLanguage();
+    try {
+      const response = await fetch(`http://localhost:4003/upload?language=${language}`);
+      if (!response.ok) throw new Error(`Failed to fetch audios. Status: ${response.status}`);
+      allAudios = await response.json();
+      renderAudios(allAudios);
+    } catch (err) {
+      console.error("❌ Error loading audios:", err.message);
+    }
+  }
+
+  function renderAudios(audios) {
+    tableBody.innerHTML = "";
+    audios.forEach((audio, index) => {
+      const fileName = audio.filePath.split("/").pop();
+      const audioURL = `http://localhost:4003/uploads/${audio.filePath}`;
+      const row = `<tr>
+        <td>${index + 1}</td>
+        <td><a href="${audioURL}" target="_blank">${fileName}</a></td>
+        <td>${audio.transcription || "N/A"}</td>
+        <td>${audio.remarks || "N/A"}</td>
+        <td><button onclick="deleteAudio('${audio.id}')">Delete</button></td>
+      </tr>`;
+      tableBody.innerHTML += row;
+    });
+  }
+
+  async function deleteAudio(id) {
+    try {
+      const response = await fetch(`http://localhost:4003/upload/${id}`, { method: "DELETE" });
+      if (response.ok) loadAudios();
+      else alert("❌ Failed to delete audio.");
+    } catch (err) {
+      console.error("❌ Error deleting audio:", err.message);
+    }
+  }
+
+  function getSelectedLanguage() {
+    return document.querySelector(".language-tab.active")?.getAttribute("data-lang") || "english";
+  }
+
+  searchBox?.addEventListener("input", () => {
+    const query = searchBox.value.toLowerCase();
+    const filtered = allAudios.filter(a =>
+      a.filePath.toLowerCase().includes(query) ||
+      (a.transcription || "").toLowerCase().includes(query) ||
+      (a.remarks || "").toLowerCase().includes(query)
+    );
+    renderAudios(filtered);
+  });
+
+  window.deleteAudio = deleteAudio;
+  loadLanguages();
+});
+
+
+
+
+users.js-
+// public/js/users.js
+
+document.getElementById("userForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+  
+    const name = document.getElementById("name").value.trim();
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value.trim();
+    const role = document.getElementById("role").value;
+  
+    try {
+      const response = await fetch("http://localhost:4016/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password, role }),
+      });
+  
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to create user.");
+      }
+  
+      alert("✅ User created successfully");
+      e.target.reset();
+      loadUsers();
+    } catch (err) {
+      console.error("❌ Error creating user:", err.message);
+      alert("❌ " + err.message);
+    }
+  });
+  
+  async function loadUsers() {
+    try {
+      const response = await fetch("http://localhost:4016/api/users");
+      const users = await response.json();
+  
+      if (!Array.isArray(users)) {
+        throw new Error("Invalid user data from server");
+      }
+  
+      const tbody = document.getElementById("usersTableBody");
+      tbody.innerHTML = "";
+  
+      users.forEach((u, i) => {
+        const row = `<tr>
+          <td>${i + 1}</td>
+          <td>${u.name}</td>
+          <td>${u.email}</td>
+          <td>${u.role}</td>
+          <td><button onclick="deleteUser(${u.id})">🗑</button></td>
+        </tr>`;
+        tbody.innerHTML += row;
+      });
+    } catch (err) {
+      console.error("❌ Failed to load users:", err.message);
+    }
+  }
+  
+  async function deleteUser(id) {
+    if (!confirm("Are you sure you want to delete this user?")) return;
+  
+    try {
+      const res = await fetch(`http://localhost:4016/api/users/${id}`, {
+        method: "DELETE",
+      });
+  
+      if (!res.ok) {
+        throw new Error("Failed to delete user");
+      }
+  
+      loadUsers();
+    } catch (err) {
+      console.error("❌ Error deleting user:", err.message);
+      alert("❌ " + err.message);
+    }
+  }
+  
+  window.onload = loadUsers;
+  
+
+zones.js-
+async function fetchAnnouncementTypes() {
+    try {
+      const res = await fetch("http://localhost:4013/api/zones/types");
+      const types = await res.json();
+  
+      const dropdown = document.getElementById("announcementDropdown");
+      dropdown.innerHTML = types.map(t => `<option value="${t.type}">${t.type}</option>`).join('');
+    } catch (err) {
+      console.error("Failed to load types:", err.message);
+    }
+  }
+  
+  async function loadTable() {
+    try {
+      const res = await fetch("http://localhost:4013/api/zones/mappings");
+      const mappings = await res.json();
+      const searchValue = document.getElementById("searchBox").value.toLowerCase();
+      const filtered = mappings.filter(m =>
+        m.announcement_type.toLowerCase().includes(searchValue) ||
+        m.zone.toLowerCase().includes(searchValue)
+      );
+  
+      const tableBody = document.getElementById("zoneTableBody");
+      tableBody.innerHTML = filtered.map((item, i) => `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${item.announcement_type}</td>
+          <td>${item.zone}</td>
+          <td><button onclick="deleteMapping(${item.id})">🗑</button></td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      console.error("Failed to load mappings:", err.message);
+    }
+  }
+  
+  async function addZoneMapping() {
+    const zone = document.getElementById("zoneInput").value.trim();
+    const type = document.getElementById("announcementDropdown").value;
+  
+    if (!zone || !type) {
+      alert("Zone and announcement type are required.");
+      return;
+    }
+  
+    try {
+      await fetch("http://localhost:4013/api/zones/mappings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ zone, announcement_type: type })
+      });
+  
+      document.getElementById("zoneInput").value = '';
+      await loadTable();
+    } catch (err) {
+      console.error("Failed to add mapping:", err.message);
+    }
+  }
+  
+  async function deleteMapping(id) {
+    if (confirm("Are you sure you want to delete this mapping?")) {
+      try {
+        await fetch(`http://localhost:4013/api/zones/mappings/${id}`, { method: "DELETE" });
+        await loadTable();
+      } catch (err) {
+        console.error("Failed to delete mapping:", err.message);
+      }
+    }
+  }
+  
+  window.onload = async () => {
+    await fetchAnnouncementTypes();
+    await loadTable();
+    document.getElementById("searchBox").addEventListener("input", loadTable);
+  };
+  
+
+
+app.js-
+import express from "express";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const app = express();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Serve static files (JS, CSS, images)
+app.use(express.static(path.join(__dirname, "public")));
+
+// Redirect to dashboard
+app.get("/", (req, res) => res.redirect("/dashboard"));
+
+// Serve clean routes without .html
+const pages = [
+  "dashboard",
+  "upload",
+  "scheduler",
+  "announcement-type",
+  "sequence",
+  "zones",
+  "settings",
+  "audio-type",
+  "users",
+  "permissions",
+  "zone-selector"
+];
+
+pages.forEach((page) => {
+  app.get(`/${page}`, (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "html", `${page}.html`));
+  });
+});
+
+const PORT = process.env.PORT || 4015;
+app.listen(PORT, () => console.log(`✅ Frontend running at http://localhost:${PORT}`));
+
+
+
+
+

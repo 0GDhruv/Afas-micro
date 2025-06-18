@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Management | AFAS</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+  <div class="wrapper">
+    <div class="sidebar">
+      <h2>AFAS</h2>
+      <a href="/dashboard"><i class="fas fa-tachometer-alt fa-fw"></i> Dashboard</a>
+      <a href="/upload"><i class="fas fa-upload fa-fw"></i> Upload Audio</a>
+      <a href="/announcement-type"><i class="fas fa-bullhorn fa-fw"></i> Announcement Type</a>
+      <a href="/sequence"><i class="fas fa-list-ol fa-fw"></i> Sequence</a>
+      <a href="/scheduler"><i class="fas fa-calendar-alt fa-fw"></i> Scheduler</a>
+      <a href="/zones"><i class="fas fa-map-marker-alt fa-fw"></i> Zones</a>
+      <a href="/users" class="active"><i class="fas fa-users fa-fw"></i> Users</a>
+      <a href="/permissions"><i class="fas fa-user-shield fa-fw"></i> Permissions</a>
+      <a href="/settings"><i class="fas fa-cog fa-fw"></i> Global Settings</a>
+      <a href="/tts-utility"><i class="fas fa-microphone-lines fa-fw"></i> TTS Utility</a>
+      <a href="/logs"><i class="fas fa-history fa-fw"></i> System Logs</a>
+    </div>
+  
+    <main class="content"> <header> <h1>User Management</h1>
+        <button class="logout-btn" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+      </header>
+
+      <section class="form-section">
+        <h2>Create New User</h2>
+        <form id="userForm">
+          <div class="form-group">
+            <label for="userName">Name:</label>
+            <input type="text" id="userName" required>
+          </div>
+          <div class="form-group">
+            <label for="userEmail">Email:</label>
+            <input type="email" id="userEmail" required>
+          </div>
+          <div class="form-group">
+            <label for="userPassword">Password:</label>
+            <input type="password" id="userPassword" required autocomplete="new-password">
+          </div>
+          <div class="form-group">
+            <label for="userRole">Role:</label>
+            <select id="userRole" required>
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+              <option value="viewer">Viewer</option>
+            </select>
+          </div>
+          <button type="submit"><i class="fas fa-user-plus"></i> Create User</button>
+        </form>
+      </section>
+
+      <section class="table-section">
+        <h2>All Users</h2>
+        <div id="usersTableContainer">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="usersTableBody">
+                <tr><td colspan="5" class="loading-text">Loading users...</td></tr>
+              </tbody>
+            </table>
+        </div>
+      </section>
+    </main>
+  </div>
+  
+  <script src="../js/base.js"></script>
+  <script src="../js/users.js"></script>
+</body>
+</html>

@@ -1,106 +1,127 @@
 import db from "../config/db.config.js";
 
-// Fetch active announcements for the next 1 hour
+// ✅ Function to Get Indian Standard Time (IST)
+const getISTTime = () => {
+    return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+};
+
+// ✅ Function to Move Flights & Scheduled Messages to `active_playlist`
+export const trackFlightUpdates = async () => {
+    try {
+        console.log("🔄 Tracking flight and scheduled messages updates...");
+
+        // ✅ Get current IST time
+        const now = getISTTime();
+        const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+        const currentTime = now.toTimeString().slice(0, 5); // HH:mm IST format
+        const nextTime = oneHourLater.toTimeString().slice(0, 5);
+        const currentDate = now.toISOString().split("T")[0]; // YYYY-MM-DD
+
+        console.log(`DEBUG: Checking for announcements between ${currentTime} and ${nextTime} on ${currentDate}`);
+
+        // ✅ Fetch upcoming flights from `playlist`
+        const [upcomingFlights] = await db.execute(
+            `SELECT id, flight_number, gate_number, announcement_type, status, 
+                    TIME_FORMAT(std, '%H:%i') AS std, 
+                    TIME_FORMAT(etd, '%H:%i') AS etd, 
+                    city_name, airline_name, arr_dep_flag, flight_date 
+             FROM playlist 
+             WHERE flight_date = ? 
+             AND ((TIME_FORMAT(std, '%H:%i') BETWEEN ? AND ?) 
+             OR (TIME_FORMAT(etd, '%H:%i') BETWEEN ? AND ?))
+             ORDER BY std ASC, etd ASC`,
+            [currentDate, currentTime, nextTime, currentTime, nextTime]
+        );
+
+        console.log("DEBUG: Flights to be added to active playlist:", upcomingFlights);
+
+        // ✅ Insert/Update Flights in `active_playlist`
+        for (const flight of upcomingFlights) {
+            const [existing] = await db.execute(
+                `SELECT id FROM active_playlist WHERE flight_number = ? AND flight_date = ?`,
+                [flight.flight_number, flight.flight_date]
+            );
+
+            if (existing.length > 0) {
+                console.log(`🔄 Updating flight in active_playlist: ${flight.flight_number}`);
+                await db.execute(
+                    `UPDATE active_playlist SET 
+                        gate_number = ?, announcement_type = ?, status = ?, std = ?, etd = ?, 
+                        flight_date = ?, city_name = ?, airline_name = ?, arr_dep_flag = ?, 
+                        created_at = NOW()
+                    WHERE flight_number = ? AND flight_date = ?`,
+                    [
+                        flight.gate_number || null, flight.announcement_type, flight.status,
+                        flight.std, flight.etd, flight.flight_date, flight.city_name, flight.airline_name,
+                        flight.arr_dep_flag, flight.flight_number, flight.flight_date
+                    ]
+                );
+            } else {
+                console.log(`📢 Inserting flight into active_playlist: ${flight.flight_number}`);
+                await db.execute(
+                    `INSERT INTO active_playlist (flight_number, gate_number, announcement_type, status, std, etd, 
+                                                  flight_date, city_name, airline_name, arr_dep_flag, created_at) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+                    [
+                        flight.flight_number, flight.gate_number || null, flight.announcement_type, flight.status,
+                        flight.std, flight.etd, flight.flight_date, flight.city_name, flight.airline_name,
+                        flight.arr_dep_flag
+                    ]
+                );
+            }
+        }
+
+        console.log("✅ Active playlist updated successfully.");
+    } catch (err) {
+        console.error("❌ Error tracking flight updates:", err.message);
+    }
+};
+
+
+// ✅ Run Flight Update Tracker Every 30 Seconds
+setInterval(trackFlightUpdates, 30000);
+
+// ✅ Fetch Active Announcements from `active_playlist`
 export const getActiveAnnouncements = async (req, res) => {
     try {
-      const now = new Date();
-      const currentTime = now.toTimeString().slice(0, 5); // HH:mm format
-      const nextTime = new Date(now.getTime() + 60 * 60 * 1000).toTimeString().slice(0, 5); // HH:mm format
-      const currentDay = now.toLocaleString("en-US", { weekday: "short" }); // Mon, Tue, etc.
-  
-      console.log("DEBUG: Current time:", currentTime);
-      console.log("DEBUG: Next hour:", nextTime);
-  
-      // Fetch schedules from the database
-      const [announcements] = await db.execute(
-        `SELECT name, audioId, timing, start_date, end_date, frequency 
-         FROM schedules 
-         WHERE 
-           start_date <= CURDATE() 
-           AND end_date >= CURDATE()`
-      );
-  
-      console.log("DEBUG: Fetched schedules from DB:", announcements);
-  
-      // Process and filter schedules
-      const activeAnnouncements = announcements.filter((announcement) => {
-        try {
-          // Handle timing
-          const timings = Array.isArray(announcement.timing)
-            ? announcement.timing // Already an array
-            : JSON.parse(announcement.timing); // Parse if JSON
-  
-          // Handle frequency
-          const frequency = (() => {
-            try {
-              return JSON.parse(announcement.frequency); // Parse if JSON
-            } catch {
-              return announcement.frequency; // Use as-is if not JSON
-            }
-          })();
-  
-          console.log("DEBUG: Timings:", timings);
-          console.log("DEBUG: Frequency:", frequency);
-  
-          // Check if the current time is within the next hour
-          const isInTimeRange = timings.some((time) => time >= currentTime && time <= nextTime);
-          const isValidDay = frequency === "all" || frequency.includes(currentDay);
-  
-          console.log("DEBUG: isInTimeRange:", isInTimeRange, "isValidDay:", isValidDay);
-          return isInTimeRange && isValidDay;
-        } catch (err) {
-          console.error(`DEBUG: Error processing schedule '${announcement.name}':`, err.message);
-          return false; // Skip invalid schedules
-        }
-      });
-  
-      console.log("DEBUG: Active announcements:", activeAnnouncements);
-  
-      // Format the response
-      const response = activeAnnouncements.map((announcement, index) => ({
-        id: index + 1,
-        name: announcement.name,
-        time: Array.isArray(announcement.timing)
-          ? announcement.timing.find((time) => time >= currentTime && time <= nextTime)
-          : JSON.parse(announcement.timing).find((time) => time >= currentTime && time <= nextTime),
-        sequence: 1, // Placeholder for future logic
-      }));
-  
-      console.log("DEBUG: Response to frontend:", response);
-      res.json(response);
+        // ✅ Get current IST time
+        const now = getISTTime();
+        const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+        const currentTime = now.toTimeString().slice(0, 5);
+        const nextTime = oneHourLater.toTimeString().slice(0, 5);
+        const currentDate = now.toISOString().split("T")[0];
+
+        console.log("DEBUG: Fetching active announcements...");
+
+        // ✅ Fetch active flights & scheduled messages from `active_playlist`
+        const [announcements] = await db.execute(
+            `SELECT id, flight_number, gate_number, announcement_type, status, std, etd, 
+                    city_name, airline_name, arr_dep_flag, flight_date 
+             FROM active_playlist 
+             WHERE flight_date = ? 
+             AND ((std BETWEEN ? AND ?) OR (etd BETWEEN ? AND ?))
+             ORDER BY std ASC, etd ASC`,
+            [currentDate, currentTime, nextTime, currentTime, nextTime]
+        );
+
+        console.log("DEBUG: Active Announcements:", announcements);
+
+        // ✅ Format Active Announcements for Response
+        const formattedAnnouncements = announcements.map((announcement) => ({
+            id: `F-${announcement.id}`,
+            announcement_name: `${announcement.announcement_type} (${announcement.arr_dep_flag == 1 ? "Arrival" : "Departure"})`,
+            status: announcement.status,
+            flight_code: announcement.flight_number,
+            airline_name: announcement.airline_name,
+            city_name: announcement.city_name,
+            gate_number: announcement.gate_number || "--",
+            time: announcement.std || announcement.etd,
+            sequence: 1,
+        }));
+
+        res.json(formattedAnnouncements);
     } catch (err) {
-      console.error("DEBUG: Error fetching active announcements:", err.message);
-      res.status(500).json({ message: "Database error", error: err.message });
+        console.error("❌ Error fetching active announcements:", err.message);
+        res.status(500).json({ message: "Database error", error: err.message });
     }
-  };
-  
-  export const addToPlaylist = async (req, res) => {
-    const { flight_number, gate_number, announcement_type, sequence, status, timestamp } = req.body;
-  
-    if (!flight_number || !announcement_type || !sequence || !status) {
-      return res.status(400).json({ message: "Missing required fields" });
-    }
-  
-    try {
-      // ✅ Convert ISO Timestamp to MySQL format (YYYY-MM-DD HH:MM:SS)
-      const mysqlTimestamp = new Date(timestamp).toISOString().slice(0, 19).replace("T", " ");
-  
-      await db.execute(
-        `INSERT INTO playlist (flight_number, gate_number, announcement_type, sequence, status, created_at) 
-         VALUES (?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE 
-         gate_number = VALUES(gate_number), 
-         announcement_type = VALUES(announcement_type), 
-         sequence = VALUES(sequence), 
-         status = VALUES(status), 
-         created_at = VALUES(created_at)`,
-        [flight_number, gate_number || null, announcement_type, JSON.stringify(sequence), status, mysqlTimestamp]
-      );
-  
-      res.status(201).json({ message: "Announcement added to playlist successfully." });
-    } catch (error) {
-      console.error("❌ Error adding to playlist:", error.message);
-      res.status(500).json({ message: "Database error", error: error.message });
-    }
-  };
-  
+};

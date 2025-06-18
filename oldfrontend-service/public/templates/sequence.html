@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sequence | AFAS</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <header class="top-bar">
+    <h1>AFAS | Script Manager</h1>
+    <button onclick="logout()">Logout</button>
+  </header>
+
+  <nav class="side-nav">
+    <a href="/dashboard">Dashboard</a>
+    <a href="/audio-type">Audio Type</a>
+    <a href="/upload">Upload Audio</a>
+    <a href="/announcement-type">Announcement Type</a>
+    <a href="/sequence" class="active">Sequence</a>
+    <a href="/scheduler">Scheduler</a>
+    <a href="/zones">Zones</a>
+    <a href="/settings">Settings</a>
+  </nav>
+
+  <main class="main-content">
+    <h2>Script Manager</h2>
+
+    <label for="area">Select Area *</label>
+    <select id="area">
+      <option value="Arrival">Arrival</option>
+      <option value="Departure">Departure</option>
+      <option value="Common">Common</option>
+    </select>
+
+    <div class="language-tabs"></div>
+
+    <form id="scriptmanager-form">
+      <input type="hidden" id="script-id" />
+
+      <label for="announcementType">Announcement Type *</label>
+      <select id="announcementType" required></select>
+
+      <label for="sequence">Sequence *</label>
+      <input type="text" id="sequence" required />
+
+      <button type="button" id="get-transcription">Get Transcription</button>
+
+      <label for="transcription">Transcription</label>
+      <textarea id="transcription" disabled></textarea>
+
+      <button type="submit" id="add-script-btn">Add Sequence</button>
+    </form>
+
+    <h2>Saved Scripts</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Announcement</th>
+          <th>Sequence</th>
+          <th>Transcription</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="scriptsTable"></tbody>
+    </table>
+  </main>
+
+  <script src="../js/base.js"></script>
+  <script src="../js/scriptmanager.js"></script>
+</body>
+</html>

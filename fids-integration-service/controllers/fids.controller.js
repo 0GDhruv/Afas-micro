@@ -1,192 +1,135 @@
-import fidsDb from "../config/fids_db.config.js"; // FIDS Database
-import afasDb from "../config/afas_db.config.js"; // AFAS Database
-import { getAnnouncementSequence } from "../services/announcement.service.js";
+// fids-integration-service/controllers/fids.controller.js
+import fidsDb from "../config/fids_db.config.js";
+import afasDb from "../config/afas_db.config.js";
+import { getAnnouncementSequence } from "../services/announcement.service.js"; // Assuming this service calls script-manager
+import axios from "axios";
 
-// ✅ Polling function for checking FIDS updates
-export const pollFIDSData = async () => {
+const LOGS_SERVICE_URL = process.env.LOGS_SERVICE_URL || "http://localhost:4025/api/logs";
+const SERVICE_NAME = "FIDSIntegrationService";
+
+async function sendToLogsService(logData) {
   try {
-    console.log("🔄 Polling FIDS database for flight updates...");
+    await axios.post(LOGS_SERVICE_URL, {
+      service_name: SERVICE_NAME,
+      ...logData,
+    });
+  } catch (error) {
+    console.error(`${SERVICE_NAME} - Error sending log:`, error.message);
+  }
+}
 
-    // ✅ Fetch all flight statuses dynamically from AFT table
+export const pollFIDSData = async () => {
+  console.log(`🔄 ${SERVICE_NAME}: Polling FIDS database for flight updates...`);
+  sendToLogsService({ log_type: "FIDS_POLL_START", message: "Polling FIDS database." });
+  try {
     const [rows] = await fidsDb.execute(
       `SELECT DISTINCT t1.*, t2.CityName, t3.AirlineName 
        FROM aft AS t1
        JOIN citymaster AS t2 ON t1.CityIATACode = t2.IATACityCode
-       JOIN airlinemaster AS t3 ON t1.IATAAirlineCode = t3.IATAAirlineCode
-       WHERE t1.Status IN (SELECT status FROM fids_status)`
+       JOIN airlinemaster AS t3 ON t1.IATAAirlineCode = t3.IATAAirlineCode`
     );
 
     if (rows.length === 0) {
-      console.log("✅ No new announcements needed.");
+      console.log(`✅ ${SERVICE_NAME}: No new flight data from FIDS.`);
+      // sendToLogsService({ log_type: "FIDS_POLL_INFO", message: "No new flight data from FIDS." });
       return;
     }
+    sendToLogsService({ log_type: "FIDS_POLL_DATA_RECEIVED", message: `Received ${rows.length} flight entries from FIDS.` });
+
+    const [announcementTypes] = await afasDb.execute(`SELECT type, area FROM announcement_types`);
+    const announcementMap = {};
+    announcementTypes.forEach(({ type, area }) => { announcementMap[type] = area; });
 
     for (const flight of rows) {
-      console.log(`✈ Processing Flight: ${flight.FlightCode}, Status: ${flight.Status}, Gate: ${flight.GateBelt}`);
+      const logContext = { flight_number: flight.FlightCode, details: { fids_status: flight.Status, arr_dep: flight.ArrDepFlag } };
+      const area = flight.ArrDepFlag === 1 ? "Arrival" : "Departure";
+      const announcementType = mapFlightStatusToAnnouncement(flight.Status, flight.ArrDepFlag, announcementMap);
 
-      // ✅ Determine announcement type based on flight status
-      const announcementType = mapFlightStatusToAnnouncement(flight.Status, flight.ArrDepFlag);
       if (!announcementType) {
-        console.log(`⚠ No announcement mapping found for status: ${flight.Status}`);
+        sendToLogsService({ ...logContext, log_type: "WARNING", message: `No announcement mapping for FIDS status: ${flight.Status}` });
         continue;
       }
-
-      // ✅ Fetch predefined announcement sequence from Script Manager
-      const sequence = await getAnnouncementSequence(announcementType);
+      const sequence = await getAnnouncementSequence(announcementType, area); // This calls script-manager
       if (!sequence) {
-        console.log(`⚠ No sequence found for announcement type: ${announcementType}`);
+        sendToLogsService({ ...logContext, log_type: "WARNING", message: `No script sequence found for type: ${announcementType} in area: ${area}` });
         continue;
       }
 
-      // ✅ Convert FlightDate to MySQL DATE format
-      const flightDate = new Date(flight.FlightDate * 1000).toISOString().split("T")[0];
+      const flightDateIST = new Date((flight.FlightDate + 19800) * 1000);
+      const flightDate = flightDateIST.toISOString().split("T")[0];
 
-      // ✅ Check if flight already exists in playlist
       const [existing] = await afasDb.execute(
         `SELECT id, status, flight_date, row_update_date FROM playlist 
          WHERE flight_code = ? AND arr_dep_flag = ? LIMIT 1`,
         [flight.FlightCode, flight.ArrDepFlag]
       );
 
-      const newStatus = mapPlaylistStatus(flight.Status); // ✅ Map status correctly
+      const newStatus = mapPlaylistStatus(flight.Status);
       const playlistEntry = {
-        flight_code: flight.FlightCode,
-        flight_number: flight.FlightNumber,
-        gate_number: flight.GateBelt || null,
-        announcement_type: announcementType,
-        sequence,
-        status: newStatus,
-        created_at: new Date().toISOString(),
-        city_name: flight.CityName,
-        airline_name: flight.AirlineName,
-        language: null,
-        flight_date: flightDate,
-        row_update_date: flight.RowUpdateDate, // ✅ Store last update time
-        arr_dep_flag: flight.ArrDepFlag,
-        std: flight.STASTD || null,
-        etd: flight.ETAETD || null
+        flight_code: flight.FlightCode, flight_number: flight.FlightNumber,
+        gate_number: flight.GateBelt || null, announcement_type: announcementType,
+        sequence, status: newStatus, city_name: flight.CityName, airline_name: flight.AirlineName,
+        flight_date: flightDate, row_update_date: flight.RowUpdateDate, arr_dep_flag: flight.ArrDepFlag,
+        std: flight.STASTD || null, etd: flight.ETAETD || null
       };
 
       if (existing.length > 0) {
-        // ✅ Flight exists → Only update if RowUpdateDate has changed
         if (existing[0].row_update_date < flight.RowUpdateDate) {
-          console.log(`🔄 Updating playlist entry for Flight ${flight.FlightCode} with status: ${newStatus}`);
           await afasDb.execute(
-            `UPDATE playlist SET 
-              gate_number = ?, 
-              announcement_type = ?, 
-              sequence = ?, 
-              status = ?, 
-              created_at = CURRENT_TIMESTAMP, 
-              city_name = ?, 
-              airline_name = ?, 
-              language = ?,
-              flight_date = ?,
-              row_update_date = ?,
-              arr_dep_flag = ?,
-              std = ?,
-              etd = ?
-            WHERE flight_code = ? AND arr_dep_flag = ?`,
-            [
-              playlistEntry.gate_number,
-              playlistEntry.announcement_type,
-              JSON.stringify(playlistEntry.sequence),
-              playlistEntry.status,
-              playlistEntry.city_name,
-              playlistEntry.airline_name,
-              playlistEntry.language,
-              playlistEntry.flight_date,
-              playlistEntry.row_update_date,
-              playlistEntry.arr_dep_flag,
-              playlistEntry.std,
-              playlistEntry.etd,
-              playlistEntry.flight_code,
-              playlistEntry.arr_dep_flag
-            ]
+            `UPDATE playlist SET gate_number = ?, announcement_type = ?, sequence = ?, status = ?, 
+             city_name = ?, airline_name = ?, flight_date = ?, row_update_date = ?, 
+             std = ?, etd = ? WHERE flight_code = ? AND arr_dep_flag = ?`,
+            [playlistEntry.gate_number, playlistEntry.announcement_type, JSON.stringify(playlistEntry.sequence),
+             playlistEntry.status, playlistEntry.city_name, playlistEntry.airline_name, playlistEntry.flight_date,
+             playlistEntry.row_update_date, playlistEntry.std, playlistEntry.etd, playlistEntry.flight_code, playlistEntry.arr_dep_flag]
           );
+          sendToLogsService({ ...logContext, log_type: "FLIGHT_DATA_UPDATED", message: `Updated flight in AFAS playlist. New status: ${newStatus}`, details: { new_fids_row_update_date: flight.RowUpdateDate } });
+        } else {
+            // console.log(`Flight ${flight.FlightCode} already up-to-date in AFAS playlist.`);
         }
       } else {
-        // ✅ Flight does not exist → Insert new entry
-        console.log(`📢 Adding new announcement for Flight ${flight.FlightCode} with status: ${newStatus}`);
         await afasDb.execute(
-          `INSERT INTO playlist (flight_code, flight_number, gate_number, announcement_type, sequence, status, created_at, city_name, airline_name, language, flight_date, row_update_date, arr_dep_flag, std, etd) 
-           VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            playlistEntry.flight_code,
-            playlistEntry.flight_number,
-            playlistEntry.gate_number,
-            playlistEntry.announcement_type,
-            JSON.stringify(playlistEntry.sequence),
-            playlistEntry.status,
-            playlistEntry.city_name,
-            playlistEntry.airline_name,
-            playlistEntry.language,
-            playlistEntry.flight_date,
-            playlistEntry.row_update_date,
-            playlistEntry.arr_dep_flag,
-            playlistEntry.std,
-            playlistEntry.etd
-          ]
+          `INSERT INTO playlist (flight_code, flight_number, gate_number, announcement_type, sequence, status, city_name, airline_name, flight_date, row_update_date, arr_dep_flag, std, etd, created_at) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+          [playlistEntry.flight_code, playlistEntry.flight_number, playlistEntry.gate_number, playlistEntry.announcement_type,
+           JSON.stringify(playlistEntry.sequence), playlistEntry.status, playlistEntry.city_name, playlistEntry.airline_name,
+           playlistEntry.flight_date, playlistEntry.row_update_date, playlistEntry.arr_dep_flag, playlistEntry.std, playlistEntry.etd]
         );
+        sendToLogsService({ ...logContext, log_type: "FLIGHT_DATA_ADDED", message: `Added new flight to AFAS playlist. Status: ${newStatus}`, details: { fids_row_update_date: flight.RowUpdateDate } });
       }
     }
+    sendToLogsService({ log_type: "FIDS_POLL_SUCCESS", message: "FIDS data polling and processing complete." });
   } catch (error) {
-    console.error("❌ Error polling FIDS data:", error.message);
+    console.error(`❌ ${SERVICE_NAME} Error polling FIDS data:`, error.message, error.stack);
+    sendToLogsService({ log_type: "ERROR", message: `Error polling FIDS data: ${error.message}` });
   }
 };
 
-
-// ✅ Map flight statuses to predefined announcement types
-const mapFlightStatusToAnnouncement = (status, arrDepFlag) => {
+// Helper functions (mapFlightStatusToAnnouncement, mapPlaylistStatus) remain the same
+const mapFlightStatusToAnnouncement = (status, arrDepFlag, announcementMap) => {
+  let area = arrDepFlag === 1 ? "Arrival" : "Departure";
+  const lowerStatus = status.trim().toLowerCase();
+  if (lowerStatus === "arrived") area = "Arrival";
   const statusMap = {
-    "Scheduled": { "1": "arrival scheduled", "2": "departure scheduled" },
-    "Arrived": { "1": "arrival arrived", "2": null },
-    "Departed": { "1": null, "2": "departure departed" },
-    "Diverted": { "1": "arrival diverted", "2": "departure diverted" },
-    "Boarding": { "2": "departure boarding all passengers" },
-    "Check IN": { "2": "departure check-in" },
-    "Final Boarding": { "2": "departure boarding final call" },
-    "Cancelled": { "1": "arrival cancelled", "2": "departure cancelled" },
-    "Rescheduled": { "1": "arrival rescheduled", "2": "departure rescheduled" },
-    "Gate Closed": { "2": "departure gate closed" },
-    "On Time": { "1": "arrival on time", "2": "departure on time" },
-    "Delayed": { "1": "arrival delayed", "2": "departure delayed" }
+    "scheduled": { "Arrival": "Scheduled", "Departure": "Scheduled" }, "arrived": { "Arrival": "Arrived" },
+    "departed": { "Departure": "Departed" }, "diverted": { "Arrival": "Diverted", "Departure": "Diverted" },
+    "boarding": { "Departure": "Boarding" }, "check in": { "Departure": "Check IN" },
+    "final boarding": { "Departure": "Final Boarding Call" }, "cancelled": { "Arrival": "Cancelled", "Departure": "Cancelled" },
+    "rescheduled": { "Arrival": "Rescheduled", "Departure": "Rescheduled" }, "gate closed": { "Departure": "Gate Closed" },
+    "on time": { "Arrival": "On Time", "Departure": "On Time" }, "delayed": { "Arrival": "Delayed", "Departure": "Delayed" }
   };
-
-  return statusMap[status]?.[arrDepFlag] || null;
+  const mappedType = statusMap[lowerStatus]?.[area];
+  if (!mappedType || !announcementMap[mappedType]) return null;
+  return mappedType;
 };
 
-// ✅ Map playlist status correctly
 const mapPlaylistStatus = (fidsStatus) => {
   const statusMap = {
-      "Scheduled": "Scheduled",
-      "Arrived": "Arrived",
-      "Departed": "Completed",
-      "Diverted": "Diverted",
-      "Boarding": "Boarding",
-      "Check IN": "In Progress",
-      "Final Boarding": "In Progress",
-      "Cancelled": "Cancelled",
-      "Rescheduled": "Scheduled",
-      "Gate Closed": "Closed",
-      "On Time": "Scheduled",
-      "Postponed": "Postponed",
-      "Preponed": "Scheduled",
-      "Indefinite": "Delayed",
-      "Additional": "Scheduled",
-      "Expected": "Scheduled",
-      "Delayed": "Delayed",
-      "Security": "Security"
+    "Scheduled": "Scheduled", "Arrived": "Arrived", "Departed": "Completed", "Diverted": "Diverted",
+    "Boarding": "Boarding", "Check IN": "In Progress", "Final Boarding": "In Progress", "Cancelled": "Cancelled",
+    "Rescheduled": "Scheduled", "Gate Closed": "Closed", "On Time": "Scheduled", "Postponed": "Postponed",
+    "Preponed": "Scheduled", "Indefinite": "Delayed", "Additional": "Scheduled", "Expected": "Scheduled",
+    "Delayed": "Delayed", "Security": "Security"
   };
-
-  const cleanStatus = fidsStatus.trim(); // Remove any trailing spaces
-  if (!statusMap[cleanStatus]) {
-      console.error(`⚠ Invalid status received: ${cleanStatus}`);
-      return "Scheduled"; // Default value to prevent errors
-  }
-  
-  return statusMap[cleanStatus];
+  return statusMap[fidsStatus.trim()] || "Scheduled";
 };
-
-
-

@@ -1,86 +1,121 @@
 import afasDb from "../config/db.config.js";
 import { fetchAudioFile } from "../config/upload-service.config.js";
 
-// ✅ Fetch announcement sequence from Script Manager
+// ✅ Fetch sequence from scripts
 export const getAnnouncementSequence = async (announcementType) => {
-    try {
-        const [rows] = await afasDb.execute(
-            "SELECT sequence FROM scripts WHERE announcement_type = ? LIMIT 1",
-            [announcementType]
-        );
-        return rows.length > 0 ? JSON.parse(rows[0].sequence) : null;
-    } catch (error) {
-        console.error(`❌ Error fetching announcement sequence:`, error.message);
-        return null;
-    }
+  try {
+    const [rows] = await afasDb.execute(
+      "SELECT sequence FROM scripts WHERE announcement_type = ? LIMIT 1",
+      [announcementType]
+    );
+
+    if (rows.length === 0) return null;
+
+    return typeof rows[0].sequence === "string"
+      ? JSON.parse(rows[0].sequence)
+      : rows[0].sequence;
+  } catch (error) {
+    console.error("❌ Error fetching sequence:", error.message);
+    return null;
+  }
 };
 
-// ✅ Fetch flight details from Playlist
+// ✅ Fetch flight row
 export const getFlightDetails = async (flightNumber) => {
-    try {
-        const [rows] = await afasDb.execute(
-            "SELECT * FROM playlist WHERE flight_number = ? LIMIT 1",
-            [flightNumber]
-        );
-        return rows.length > 0 ? rows[0] : null;
-    } catch (error) {
-        console.error(`❌ Error fetching flight details:`, error.message);
-        return null;
-    }
+  try {
+    const [rows] = await afasDb.execute(
+      "SELECT * FROM active_playlist WHERE flight_number = ? LIMIT 1",
+      [flightNumber]
+    );
+    return rows.length > 0 ? rows[0] : null;
+  } catch (error) {
+    console.error("❌ Error fetching flight details:", error.message);
+    return null;
+  }
 };
 
-// ✅ Fetch corresponding audio files
-export const getAudioFiles = async (sequence, flightDetails) => {
-    let audioClips = [];
-    
-    for (const item of sequence) {
-        let audioClip = null;
+// ✅ Build the audio clips from placeholders and static entries
+export const getAudioFiles = async (sequence, flightDetails, language = "english") => {
+  const audioClips = [];
 
-        if (item.startsWith("*") && item.endsWith("*")) {
-            // ✅ Dynamic Audio Values
-            let variable = item.replace(/\*/g, ""); // Remove `*` from *IATAAIR*
-            let value = flightDetails[variable];
+  for (const item of sequence) {
+    let audioClip = null;
 
-            if (!value) {
-                console.warn(`⚠ Missing value for variable: ${variable}`);
-                continue;
-            }
+    if (item.startsWith("*") && item.endsWith("*")) {
+      const variable = item.replace(/\*/g, "");
+      const value = getMappedValue(variable, flightDetails);
 
-            // ✅ Special Case: Flight Number (Break into individual digits)
-            if (variable === "IATAFLIGHTNO") {
-                for (let char of value) {
-                    let category = char.match(/\d/) ? "numbers" : "airline";
-                    let filename = `${char}.wav`;
-                    let clip = await fetchAudioFile(category, filename);
-                    if (clip) audioClips.push(clip);
-                }
-                continue;
-            }
+      if (!value) {
+        console.warn(`⚠ Missing value for variable: ${variable}`);
+        continue;
+      }
 
-            // ✅ Fetch Corresponding Audio
-            let category = getCategory(variable);
-            audioClip = await fetchAudioFile(category, `${value}.wav`);
-        } else {
-            // ✅ Static Audio File
-            audioClip = await fetchAudioFile("std", `${item}.wav`);
+      if (variable === "IATAFLIGHTNO") {
+        for (let digit of value) {
+          const clip = await fetchAudioFile("numbers", `${digit}.wav`, language);
+          if (clip) audioClips.push(clip);
         }
+        continue;
+      }
 
-        if (audioClip) audioClips.push(audioClip);
+      if (["ETD", "STD"].includes(variable)) {
+        const [hh, mm] = value.split(":");
+        const timeClips = [
+          await fetchAudioFile("numbers", `${hh}.wav`, language),
+          await fetchAudioFile("std", "hours.wav", language),
+          await fetchAudioFile("numbers", `${mm}.wav`, language),
+          await fetchAudioFile("std", "minutes.wav", language),
+        ];
+        audioClips.push(...timeClips.filter(Boolean));
+        continue;
+      }
+
+      const category = getCategory(variable);
+      const formatted = formatValue(value);
+      audioClip = await fetchAudioFile(category, `${formatted}.wav`, language);
+    } else {
+      // Static STD4, STD10, etc.
+      audioClip = await fetchAudioFile("std", item + ".wav", language);
     }
 
-    return audioClips;
+    if (audioClip) audioClips.push(audioClip);
+  }
+
+  return audioClips;
 };
 
-// ✅ Determine Audio File Category
+// ✅ Category logic
 const getCategory = (variable) => {
-    const categoryMap = {
-        "IATAAIR": "airline",
-        "IATAFLIGHTNO": "numbers",
-        "DESTCITY": "cities",
-        "GATENO": "gate",
-        "ROWS": "rows",
-        "ZONENO": "zones",
-        "ZONELETTER": "zones",
-    };
-    return categoryMap[variable] || "std";
+  const categoryMap = {
+    IATAAIR: "airline",
+    DESTCITY: "cities",
+    GATENO: "gate",
+    ROWS: "rows",
+    ZONENO: "zones",
+    ZONELETTER: "zones",
+    ETD: "numbers",
+    STD: "numbers",
+  };
+  return categoryMap[variable] || "std";
+};
+
+// ✅ Format e.g. "Air India" → "air_india"
+const formatValue = (value) =>
+  String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_]/gi, "");
+
+// ✅ Dynamic variable to actual value mapping
+const getMappedValue = (variable, flightDetails) => {
+  const map = {
+    IATAAIR: flightDetails.airline_name,
+    DESTCITY: flightDetails.city_name,
+    IATAFLIGHTNO: flightDetails.flight_number,
+    ETD: flightDetails.etd || flightDetails.std,
+    STD: flightDetails.std || flightDetails.etd,
+    GATENO: flightDetails.gate_number,
+  };
+  return map[variable] || flightDetails[variable];
 };

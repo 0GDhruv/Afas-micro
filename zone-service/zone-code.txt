@@ -1,0 +1,134 @@
+zone-service-
+import mysql from "mysql2/promise";
+import dotenv from "dotenv";
+dotenv.config();
+
+const pool = mysql.createPool({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASS,
+  database: process.env.DB_NAME,
+  waitForConnections: true,
+  connectionLimit: 10,
+});
+
+export default pool;
+
+
+zone.controller.js-
+import {
+  getAllZones,
+  getAnnouncementTypes,
+  addZoneMapping,
+  deleteZoneMapping,
+  getDistinctZones
+} from "../models/zone.model.js";
+import db from "../config/db.config.js";
+
+export const getZones = async (req, res) => {
+  const [rows] = await getAllZones();
+  res.json(rows);
+};
+
+export const getTypes = async (req, res) => {
+  const [rows] = await getAnnouncementTypes();
+  res.json(rows);
+};
+
+export const getZonesList = async (req, res) => {
+  const [rows] = await getDistinctZones();
+  res.json(rows);
+};
+
+export const addMapping = async (req, res) => {
+  const { zone, announcement_type } = req.body;
+  const [types] = await getAnnouncementTypes();
+  const type = types.find(t => t.type === announcement_type);
+  if (!type) return res.status(400).json({ message: "Invalid type" });
+  await addZoneMapping(type.id, zone);
+  res.status(201).json({ message: "Mapping added" });
+};
+
+export const deleteMapping = async (req, res) => {
+  const { id } = req.params;
+  await deleteZoneMapping(id);
+  res.status(204).send();
+};
+
+
+zone.model.js-
+import db from "../config/db.config.js";
+
+export const getAllZones = () =>
+  db.execute(`
+    SELECT az.id, at.type AS announcement_type, az.zone_name AS zone
+    FROM announcement_zones az
+    JOIN announcement_types at ON az.announcement_type_id = at.id
+  `);
+
+export const getAnnouncementTypes = () =>
+  db.execute(`SELECT id, type FROM announcement_types`);
+
+export const getDistinctZones = () =>
+  db.execute(`SELECT DISTINCT zone_name AS zone FROM announcement_zones`);
+
+export const addZoneMapping = (announcement_type_id, zone_name) =>
+  db.execute("INSERT INTO announcement_zones (announcement_type_id, zone_name) VALUES (?, ?)", [announcement_type_id, zone_name]);
+
+export const deleteZoneMapping = (id) =>
+  db.execute("DELETE FROM announcement_zones WHERE id = ?", [id]);
+
+
+zones.routes.js-
+import express from "express";
+import {
+  getZones,
+  getTypes,
+  addMapping,
+  deleteMapping,
+  getZonesList
+} from "../controllers/zone.controller.js";
+
+const router = express.Router();
+
+router.get("/mappings", getZones);
+router.get("/types", getTypes);
+router.get("/zones", getZonesList);
+router.post("/mappings", addMapping);
+router.delete("/mappings/:id", deleteMapping);
+
+export default router;
+
+
+.env-
+DB_HOST=localhost
+DB_USER=root
+DB_PASS=Infosoft@123
+DB_NAME=afas
+DB_PORT=3306
+PORT=4013
+
+app.js-
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import zoneRoutes from "./routes/zone.routes.js";
+
+dotenv.config();
+const app = express();
+const PORT = process.env.PORT || 4013;
+
+app.use(cors({
+  origin: "http://localhost:4015", // frontend-service
+  methods: ["GET", "POST", "DELETE"],
+  allowedHeaders: ["Content-Type"]
+}));
+
+app.use(express.json());
+app.use("/api/zones", zoneRoutes);
+
+// ❌ No static HTML serving here
+
+app.listen(PORT, () => {
+  console.log(`✅ Zone Service running on http://localhost:${PORT}`);
+});

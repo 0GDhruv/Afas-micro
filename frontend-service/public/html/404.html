@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Page Not Found | AFAS</title>
+    <link rel="stylesheet" href="../css/style.css"> <style>
+        /* Specific styles for 404 page can go here or in main style.css */
+        .not-found-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: calc(100vh - 60px); /* Full viewport height minus header */
+            text-align: center;
+            padding: 20px;
+        }
+        .not-found-container h1 {
+            font-size: 3em;
+            color: #0f0; /* AFAS Green */
+            margin-bottom: 20px;
+        }
+        .not-found-container p {
+            font-size: 1.2em;
+            color: #ccc;
+            margin-bottom: 30px;
+        }
+        .not-found-container a {
+            padding: 10px 20px;
+            background-color: #0f0;
+            color: #111;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+        .not-found-container a:hover {
+            background-color: #0d0;
+        }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <div class="sidebar">
+          <h2>AFAS</h2>
+          <a href="/dashboard"><i class="fas fa-tachometer-alt fa-fw"></i> Dashboard</a>
+          <a href="/upload"><i class="fas fa-upload fa-fw"></i> Upload Audio</a>
+          <a href="/announcement-type"><i class="fas fa-bullhorn fa-fw"></i> Announcement Type</a>
+          <a href="/sequence"><i class="fas fa-list-ol fa-fw"></i> Sequence</a>
+          <a href="/scheduler"><i class="fas fa-calendar-alt fa-fw"></i> Scheduler</a>
+          <a href="/zones"><i class="fas fa-map-marker-alt fa-fw"></i> Zones</a>
+          <a href="/users"><i class="fas fa-users fa-fw"></i> Users</a>
+          <a href="/permissions"><i class="fas fa-user-shield fa-fw"></i> Permissions</a>
+          <a href="/settings"><i class="fas fa-cog fa-fw"></i> Global Settings</a>
+          <a href="/tts-utility"><i class="fas fa-microphone-lines fa-fw"></i> TTS Utility</a>
+        </div>
+
+        <main class="content">
+            <header>
+                <h1>Error</h1>
+            </header>
+            <div class="not-found-container">
+                <h1>404</h1>
+                <p>Oops! The page you are looking for could not be found.</p>
+                <a href="/dashboard"><i class="fas fa-home"></i> Go to Dashboard</a>
+            </div>
+        </main>
+    </div>
+</body>
+</html>

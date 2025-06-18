@@ -1,0 +1,32 @@
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Announcement</th>
+      <th>Status</th>
+      <th>Flight</th>
+      <th>Airline</th>
+      <th>City</th>
+      <th>Gate</th>
+      <th>Time</th>
+      <th>Seq</th>
+    </tr>
+  </thead>
+  <tbody id="announcementTableBody">
+    {{#each announcements}}
+      <tr>
+        <td>{{inc @index}}</td>
+        <td>{{announcement_name}}</td>
+        <td>{{status}}</td>
+        <td>{{flight_code}}</td>
+        <td>{{airline_name}}</td>
+        <td>{{city_name}}</td>
+        <td>{{gate_number}}</td>
+        <td>{{time}}</td>
+        <td>{{sequence}}</td>
+      </tr>
+    {{else}}
+      <tr><td colspan="9">No announcements found.</td></tr>
+    {{/each}}
+  </tbody>
+</table>

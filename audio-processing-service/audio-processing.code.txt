@@ -1,0 +1,668 @@
+db.config.js :-
+import mysql from "mysql2/promise";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const afasDb = mysql.createPool({
+    host: process.env.DB_HOST || "localhost",
+    user: process.env.DB_USER || "afas_user",
+    password: process.env.DB_PASSWORD || "Infosoft@123",
+    database: process.env.DB_NAME || "afas",
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+});
+
+export default afasDb;
+
+
+
+upload-service.config.js :-
+import axios from "axios";
+import path from "path";
+import fs from "fs";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const UPLOAD_SERVICE_URL = process.env.UPLOAD_SERVICE_URL || "http://localhost:4003";
+
+export const fetchAudioFile = async (category, filename, language = "english") => {
+  try {
+    const url = `${UPLOAD_SERVICE_URL}/audio-file`;
+    const response = await axios.get(url, {
+      params: { category, filename, language },
+      responseType: "arraybuffer",
+    });
+
+    if (response.status === 200) {
+      const tempDir = path.resolve("output_audio/tmp"); // ✅ Writable local folder
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+
+      const filePath = path.join(tempDir, `${Date.now()}-${filename}`);
+      const fsPromises = await import("fs/promises");
+      await fsPromises.writeFile(filePath, Buffer.from(response.data));
+      return filePath;
+    } else {
+      console.warn(`❌ Audio not found: ${category}/${filename}`);
+      return null;
+    }
+  } catch (err) {
+    console.error(`❌ Error fetching audio file (${category}/${filename}):`, err.message);
+    return null;
+  }
+};
+
+
+
+audioProcessing.controller.js :-
+// audio-processing-service/controllers/audioProcessing.controller.js
+import { getAnnouncementSequence, getFlightDetails, getAudioFiles } from "../services/audioFetch.service.js";
+import { mergeAudioFiles } from "../services/audioMerge.service.js";
+import afasDb from "../config/db.config.js";
+import fs from "fs-extra";
+import path from "path";
+import { fileURLToPath } from "url";
+import axios from "axios"; // Added axios
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const OUTPUT_DIR = path.resolve(__dirname, "..", "output_audio/");
+fs.ensureDirSync(OUTPUT_DIR);
+const TEMP_OUTPUT_DIR = path.join(OUTPUT_DIR, "tmp");
+fs.ensureDirSync(TEMP_OUTPUT_DIR);
+
+const LOGS_SERVICE_URL = process.env.LOGS_SERVICE_URL || "http://localhost:4025/api/logs";
+const SERVICE_NAME = "AudioProcessingService";
+
+async function sendToLogsService(logData) {
+  try {
+    await axios.post(LOGS_SERVICE_URL, {
+      service_name: SERVICE_NAME,
+      ...logData,
+    });
+  } catch (error) {
+    console.error(`${SERVICE_NAME} - Error sending log to logs service:`, error.message);
+  }
+}
+
+const cleanOldFilesCron = () => {
+  const now = Date.now();
+  const maxAge = 3 * 60 * 60 * 1000; 
+  fs.readdir(OUTPUT_DIR, (err, files) => {
+    if (err) {
+      console.error("Error reading output_audio directory for cleanup:", err);
+      sendToLogsService({ log_type: "ERROR", message: "Error reading output_audio for cleanup.", details: { error: err.message } });
+      return;
+    }
+    files.forEach(file => {
+      if (file === 'tmp') return;
+      const fullPath = path.join(OUTPUT_DIR, file);
+      fs.stat(fullPath, (statErr, stats) => {
+        if (statErr) return;
+        if (stats.isFile() && (now - stats.mtimeMs > maxAge)) {
+          fs.unlink(fullPath, unlinkErr => {
+            if (unlinkErr) {
+              console.error(`Error deleting old file ${fullPath}:`, unlinkErr);
+              sendToLogsService({ log_type: "ERROR", message: `Cron: Error deleting old audio file ${file}`, details: { error: unlinkErr.message } });
+            } else {
+              console.log("🧹 Cron Deleted Old Audio:", file);
+              sendToLogsService({ log_type: "AUDIO_FILE_CLEANUP", message: `Cron: Deleted old audio file ${file}` });
+            }
+          });
+        }
+      });
+    });
+  });
+};
+setInterval(cleanOldFilesCron, 60 * 60 * 1000);
+console.log("Scheduled cron job for cleaning old audio files every hour.");
+
+export const processAnnouncement = async (req, res) => {
+    const { flight_number } = req.params;
+    const requestedLanguage = req.query.language || "english";
+    const logContext = { flight_number, language: requestedLanguage };
+
+    try {
+        const details = await getFlightDetails(flight_number);
+        if (!details) {
+            sendToLogsService({ ...logContext, log_type: "ERROR", message: `Flight not found in active playlist during audio generation.` });
+            return res.status(404).json({ message: `Flight ${flight_number} not found in active playlist.` });
+        }
+        if (!details.announcement_type) {
+            sendToLogsService({ ...logContext, log_type: "ERROR", message: `Flight does not have an announcement type assigned.` });
+             return res.status(400).json({ message: `Flight ${flight_number} does not have an announcement type assigned.` });
+        }
+
+        const sequence = await getAnnouncementSequence(details.announcement_type);
+        if (!sequence) {
+            sendToLogsService({ ...logContext, log_type: "ERROR", message: `No announcement sequence found for type: ${details.announcement_type}.` });
+            return res.status(404).json({ message: `No announcement sequence found for type: ${details.announcement_type}.` });
+        }
+
+        const audioClips = await getAudioFiles(sequence, details, requestedLanguage);
+        if (!audioClips || audioClips.length === 0) {
+            sendToLogsService({ ...logContext, log_type: "ERROR", message: `Could not gather audio clips.`});
+            return res.status(400).json({ message: `Could not gather audio clips for flight ${flight_number} in ${requestedLanguage}.` });
+        }
+
+        const timeSuffix = (details.std || details.etd || "00-00-00").replace(/:/g, "-");
+        const outputFileName = `${flight_number}_${requestedLanguage}_${timeSuffix}.wav`;
+
+        const mergeResult = await mergeAudioFiles(audioClips, outputFileName);
+        if (!mergeResult || !mergeResult.filename) {
+            sendToLogsService({ ...logContext, log_type: "ERROR", message: "Audio merge process failed." });
+            return res.status(500).json({ message: "Failed to process and merge audio files." });
+        }
+        
+        const audioDuration = mergeResult.duration;
+        const actualFilename = mergeResult.filename;
+
+        if (details.id && audioDuration) {
+            try {
+                await afasDb.execute("UPDATE active_playlist SET audio_duration = ? WHERE id = ?", [audioDuration, details.id]);
+                sendToLogsService({ ...logContext, log_type: "DB_UPDATE", message: `Updated audio_duration to ${audioDuration} for flight ID ${details.id}.`, details: { file: actualFilename } });
+            } catch (dbErr) {
+                sendToLogsService({ ...logContext, log_type: "ERROR", message: `Failed to update audio_duration for flight ID ${details.id}.`, details: { error: dbErr.message, file: actualFilename } });
+            }
+        }
+        sendToLogsService({ ...logContext, log_type: "AUDIO_GENERATED", message: `Announcement audio generated successfully.`, details: { file: actualFilename, duration: audioDuration } });
+        res.status(200).json({ 
+            message: "Announcement audio generated successfully.", 
+            audio_path: actualFilename, 
+            duration: audioDuration || 'N/A' 
+        });
+    } catch (err) {
+        console.error(`❌ Error in processAnnouncement for ${flight_number}:`, err.message, err.stack);
+        sendToLogsService({ ...logContext, log_type: "ERROR", message: `General error in processAnnouncement: ${err.message}` });
+        res.status(500).json({ message: "Failed to process announcement", error: err.message });
+    }
+};
+
+export const markFlightAsAnnounced = async (req, res) => {
+  const { flight_number, language, audio_path_to_delete } = req.body;
+  const logContext = { flight_number, language, audio_path: audio_path_to_delete };
+
+  if (!flight_number) {
+    sendToLogsService({ log_type: "ERROR", message: "markFlightAsAnnounced called with missing flight_number." });
+    return res.status(400).json({ message: "Missing flight_number to mark as announced." });
+  }
+  if (!language || !audio_path_to_delete) {
+      sendToLogsService({ ...logContext, log_type: "WARNING", message: "markFlightAsAnnounced called with missing language or audio_path. Cannot delete specific audio file." });
+  }
+
+  try {
+    // This function is now primarily for logging and file deletion.
+    // The actual DB status update to 'Completed' for the entire flight should be handled by flightAnnouncer.worker
+    // after all its language announcements are confirmed played.
+    sendToLogsService({ ...logContext, log_type: "ANNOUNCEMENT_PLAYBACK_CONFIRMED", message: `Playback confirmed by scheduler.` });
+
+    if (audio_path_to_delete && typeof audio_path_to_delete === 'string') {
+      const fullAudioPath = path.join(OUTPUT_DIR, path.basename(audio_path_to_delete));
+      try {
+        if (await fs.pathExists(fullAudioPath)) {
+          await fs.unlink(fullAudioPath);
+          sendToLogsService({ ...logContext, log_type: "AUDIO_FILE_DELETED", message: `Deleted announced audio file: ${audio_path_to_delete}` });
+        } else {
+          sendToLogsService({ ...logContext, log_type: "WARNING", message: `Audio file not found for deletion: ${audio_path_to_delete}` });
+        }
+      } catch (fileErr) {
+        sendToLogsService({ ...logContext, log_type: "ERROR", message: `Error deleting audio file ${audio_path_to_delete}`, details: { error: fileErr.message } });
+      }
+    }
+    res.status(200).json({ message: `Announcement for flight ${flight_number} (${language}) processed for completion.` });
+  } catch (err) {
+    console.error(`❌ Error in markFlightAsAnnounced for ${flight_number}:`, err.message, err.stack);
+    sendToLogsService({ ...logContext, log_type: "ERROR", message: `Error in markFlightAsAnnounced: ${err.message}` });
+    res.status(500).json({ message: "Error processing announcement completion", error: err.message });
+  }
+};
+
+export const getActiveAnnouncements = async (req, res) => {
+  try {
+    const [rows] = await afasDb.execute(
+      `SELECT 
+         ap.id, ap.flight_number, ap.std, ap.etd, ap.announcement_count, ap.announcement_status,
+         ap.current_announcement_language as language, 
+         ap.current_audio_path as audio_path 
+       FROM active_playlist ap
+       WHERE ap.announcement_status = 'ReadyForScheduler'`
+    );
+    if (rows.length > 0) {
+        sendToLogsService({ log_type: "SCHEDULER_POLL", message: `Scheduler polled ${rows.length} active announcements.` });
+    }
+    res.json(rows.map(row => ({
+        flight_number: row.flight_number,
+        audio_path: row.audio_path, 
+        language: row.language,
+        announcement_count: row.announcement_count || 0,
+      }))
+    );
+  } catch (err) {
+    console.error("❌ Error fetching active announcements for scheduler:", err.message, err.stack);
+    sendToLogsService({ log_type: "ERROR", message: `Failed to get active announcements for scheduler: ${err.message}` });
+    res.status(500).json({ message: "Failed to get active announcements", error: err.message });
+  }
+};
+
+
+
+
+
+audioProcessing.routes.js :-
+import express from "express";
+import { processAnnouncement, markFlightAsAnnounced, getActiveAnnouncements } from "../controllers/audioProcessing.controller.js";
+
+const router = express.Router();
+
+router.get("/generate/:flight_number", processAnnouncement);
+router.post("/mark-announced", markFlightAsAnnounced);
+router.get("/active", getActiveAnnouncements);
+
+export default router;
+
+
+
+
+
+audioFetch.service.js :-
+import afasDb from "../config/db.config.js";
+import { fetchAudioFile } from "../config/upload-service.config.js";
+
+// ✅ Fetch sequence from scripts
+export const getAnnouncementSequence = async (announcementType) => {
+  try {
+    const [rows] = await afasDb.execute(
+      "SELECT sequence FROM scripts WHERE announcement_type = ? LIMIT 1",
+      [announcementType]
+    );
+
+    if (rows.length === 0) return null;
+
+    return typeof rows[0].sequence === "string"
+      ? JSON.parse(rows[0].sequence)
+      : rows[0].sequence;
+  } catch (error) {
+    console.error("❌ Error fetching sequence:", error.message);
+    return null;
+  }
+};
+
+// ✅ Fetch flight row
+export const getFlightDetails = async (flightNumber) => {
+  try {
+    const [rows] = await afasDb.execute(
+      "SELECT * FROM active_playlist WHERE flight_number = ? LIMIT 1",
+      [flightNumber]
+    );
+    return rows.length > 0 ? rows[0] : null;
+  } catch (error) {
+    console.error("❌ Error fetching flight details:", error.message);
+    return null;
+  }
+};
+
+// ✅ Build the audio clips from placeholders and static entries
+export const getAudioFiles = async (sequence, flightDetails, language = "english") => {
+  const audioClips = [];
+
+  for (const item of sequence) {
+    let audioClip = null;
+
+    if (item.startsWith("*") && item.endsWith("*")) {
+      const variable = item.replace(/\*/g, "");
+      const value = getMappedValue(variable, flightDetails);
+
+      if (!value) {
+        console.warn(`⚠ Missing value for variable: ${variable}`);
+        continue;
+      }
+
+      if (variable === "IATAFLIGHTNO") {
+        for (let digit of value) {
+          const clip = await fetchAudioFile("numbers", `${digit}.wav`, language);
+          if (clip) audioClips.push(clip);
+        }
+        continue;
+      }
+
+      if (["ETD", "STD"].includes(variable)) {
+        const [hh, mm] = value.split(":");
+        const timeClips = [
+          await fetchAudioFile("numbers", `${hh}.wav`, language),
+          await fetchAudioFile("std", "hours.wav", language),
+          await fetchAudioFile("numbers", `${mm}.wav`, language),
+          await fetchAudioFile("std", "minutes.wav", language),
+        ];
+        audioClips.push(...timeClips.filter(Boolean));
+        continue;
+      }
+
+      const category = getCategory(variable);
+      const formatted = formatValue(value);
+      audioClip = await fetchAudioFile(category, `${formatted}.wav`, language);
+    } else {
+      // Static STD4, STD10, etc.
+      audioClip = await fetchAudioFile("std", item + ".wav", language);
+    }
+
+    if (audioClip) audioClips.push(audioClip);
+  }
+
+  return audioClips;
+};
+
+// ✅ Category logic
+const getCategory = (variable) => {
+  const categoryMap = {
+    IATAAIR: "airline",
+    DESTCITY: "cities",
+    GATENO: "gate",
+    ROWS: "rows",
+    ZONENO: "zones",
+    ZONELETTER: "zones",
+    ETD: "numbers",
+    STD: "numbers",
+  };
+  return categoryMap[variable] || "std";
+};
+
+// ✅ Format e.g. "Air India" → "air_india"
+const formatValue = (value) =>
+  String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_]/gi, "");
+
+// ✅ Dynamic variable to actual value mapping
+const getMappedValue = (variable, flightDetails) => {
+  const map = {
+    IATAAIR: flightDetails.airline_name,
+    DESTCITY: flightDetails.city_name,
+    IATAFLIGHTNO: flightDetails.flight_number,
+    ETD: flightDetails.etd || flightDetails.std,
+    STD: flightDetails.std || flightDetails.etd,
+    GATENO: flightDetails.gate_number,
+  };
+  return map[variable] || flightDetails[variable];
+};
+
+
+
+audioMerge.service.js :-
+import { exec } from "child_process";
+import fs from "fs";
+import path from "path";
+
+const OUTPUT_DIR = "output_audio/";
+
+export const mergeAudioFiles = async (audioPaths, outputFileName) => {
+  if (!audioPaths.length) {
+    console.error("❌ No audio files to merge.");
+    return null;
+  }
+
+  if (!fs.existsSync(OUTPUT_DIR)) {
+    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  }
+
+  const listFilePath = path.join(OUTPUT_DIR, `concat_list_${Date.now()}.txt`);
+  const listContent = audioPaths.map(file => `file '${path.resolve(file)}'`).join("\n");
+  fs.writeFileSync(listFilePath, listContent);
+
+  const finalName = outputFileName || `${Date.now()}.wav`;
+  const outputPath = path.join(OUTPUT_DIR, finalName);
+
+  const cmd = `ffmpeg -y -f concat -safe 0 -i "${listFilePath}" -c copy "${outputPath}"`;
+
+  return new Promise((resolve, reject) => {
+    exec(cmd, (err, stdout, stderr) => {
+      fs.unlinkSync(listFilePath);
+      if (err) {
+        console.error("❌ Merge error:", stderr || err.message);
+        return reject(null);
+      }
+      console.log(`✅ Merged Audio: ${outputPath}`);
+      resolve(finalName);
+    });
+  });
+};
+
+
+
+.env :-
+# Database Config
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=Infosoft@123
+DB_NAME=afas
+
+# Upload Service API
+UPLOAD_SERVICE_URL=http://localhost:4003
+
+
+
+
+
+app.js :-
+import express from "express";
+import dotenv from "dotenv";
+import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
+import audioRoutes from "./routes/audioProcessing.routes.js";
+import "./flightAnnouncer.worker.js";
+
+// Load environment variables
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 4008;
+
+// Define __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Serve merged audio files from output directory
+app.use(express.static(path.join(__dirname, "output_audio")));
+
+// API Routes for audio generation
+app.use("/audio", audioRoutes);
+
+// ✅ Do NOT include `/audio-file` route here anymore
+
+// Start the server
+app.listen(PORT, () => {
+  console.log(`✅ Audio Processing Service running on http://localhost:${PORT}`);
+});
+
+
+
+
+
+flightAnnouncer.worker.js-
+// audio-processing-service/flightAnnouncer.worker.js
+import afasDb from "./config/db.config.js";
+import { getAnnouncementSequence, getAudioFiles } from "./services/audioFetch.service.js";
+import { mergeAudioFiles } from "./services/audioMerge.service.js";
+import axios from "axios";
+import path from "path";
+import fs from "fs-extra";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const OUTPUT_DIR = path.resolve(__dirname, "..", "output_audio/");
+const SETTINGS_SERVICE_URL = process.env.SETTINGS_SERVICE_URL || "http://localhost:4010";
+const LOGS_SERVICE_URL = process.env.LOGS_SERVICE_URL || "http://localhost:4025/api/logs";
+const SERVICE_NAME = "AudioProcessingWorker";
+
+async function sendToLogsService(logData) {
+  try {
+    await axios.post(LOGS_SERVICE_URL, {
+      service_name: SERVICE_NAME,
+      ...logData,
+    });
+  } catch (error) {
+    console.error(`${SERVICE_NAME} - Error sending log:`, error.message);
+  }
+}
+
+const getEffectiveSettings = async (flightNumber) => {
+    let globalSettings = { language_order: ["english"], advance_minutes: 15 };
+    try {
+        const { data } = await axios.get(`${SETTINGS_SERVICE_URL}/settings`);
+        globalSettings = { ...globalSettings, ...data };
+    } catch (e) {
+        sendToLogsService({ flight_number: flightNumber, log_type: "WARNING", message: "Could not fetch global settings, using defaults.", details: { error: e.message } });
+    }
+    try {
+        const { data: flightSpecific } = await axios.get(`${SETTINGS_SERVICE_URL}/settings/flight/${flightNumber}`);
+        if (flightSpecific && flightSpecific.language_order && flightSpecific.language_order.length > 0) {
+            sendToLogsService({ flight_number: flightNumber, log_type: "INFO", message: "Using flight-specific language order.", details: { order: flightSpecific.language_order } });
+            return { ...globalSettings, ...flightSpecific };
+        }
+    } catch (e) { /* Use global if 404 or error */ }
+    return globalSettings;
+};
+
+const checkAndAnnounceFlights = async () => {
+  const cycleTime = new Date().toISOString();
+  console.log(`WORKER: 🔍 Cycle Start ${cycleTime}`);
+  sendToLogsService({ log_type: "WORKER_CYCLE_START", message: "Flight announcer worker cycle started." });
+  try {
+    const [pendingFlights] = await afasDb.execute(`
+      SELECT * FROM active_playlist 
+      WHERE (announcement_status = 'Pending' OR announcement_status IS NULL) 
+        AND announcement_type IS NOT NULL AND flight_date >= CURDATE()
+    `);
+
+    if (pendingFlights.length === 0) {
+      console.log("WORKER: ✅ No pending flights for generation.");
+      return;
+    }
+    sendToLogsService({ log_type: "INFO", message: `Found ${pendingFlights.length} flight(s) in 'Pending' state.` });
+
+    for (const flight of pendingFlights) {
+      const logContext = { flight_number: flight.flight_number, flight_db_id: flight.id };
+      const effectiveSettings = await getEffectiveSettings(flight.flight_number);
+      const advanceMinutes = parseInt(effectiveSettings.advance_minutes || 15);
+      const languageOrder = effectiveSettings.language_order && effectiveSettings.language_order.length > 0 ? effectiveSettings.language_order : ["english"];
+
+      const now = new Date();
+      const flightTimeStr = flight.std || flight.etd;
+      if (!flightTimeStr) {
+        sendToLogsService({ ...logContext, log_type: "WARNING", message: "Skipping due to missing STD/ETD." });
+        continue;
+      }
+      const [hh, mm] = flightTimeStr.split(":");
+      const flightScheduledTime = new Date(flight.flight_date);
+      flightScheduledTime.setHours(parseInt(hh), parseInt(mm), 0, 0);
+      const announcementWindowStart = new Date(flightScheduledTime.getTime() - advanceMinutes * 60000);
+
+      if (now < announcementWindowStart) {
+        console.log(`WORKER: ⏩ Flight ${flight.flight_number} not yet in advance window.`);
+        continue;
+      }
+      
+      sendToLogsService({ ...logContext, log_type: "PROCESSING_FLIGHT", message: `Processing flight for announcement.`, details: { scheduled: flightScheduledTime, advanceWin: advanceMinutes } });
+      
+      // Simplified: Process first language in order not yet marked 'ReadyForScheduler' or 'Completed' for this flight.
+      // This requires a more complex state or a separate queue table for full robustness.
+      // For this iteration, we'll assume we process one language and set it to ReadyForScheduler.
+      // The `current_announcement_language` and `current_audio_path` will be used by `/audio/active`.
+
+      let languageProcessedThisCycle = false;
+      for (const lang of languageOrder) {
+        // Ideally, check if this language has already been processed/queued for this flight
+        // e.g., by looking at a specific status or a related queue table.
+        // For now, if the flight is 'Pending', we try to generate for the first language in its order.
+        
+        const timeSuffix = flightTimeStr.replace(/:/g, "-");
+        const outputFileName = `${flight.flight_number}_${lang}_${timeSuffix}.wav`;
+        const outputPath = path.join(OUTPUT_DIR, outputFileName);
+        let audioDuration = null;
+        let audioGenerated = false;
+
+        if (await fs.pathExists(outputPath)) {
+          console.log(`WORKER: Audio for ${flight.flight_number} (${lang}) exists: ${outputFileName}.`);
+          sendToLogsService({ ...logContext, language: lang, log_type: "AUDIO_EXISTS", message: "Audio file already exists.", details: { file: outputFileName } });
+          // Try to get duration if not already set
+          if (!flight.audio_duration) { // Assuming flight object has audio_duration from current DB state
+             // This part is tricky without calling ffprobe again.
+             // Best if duration is stored upon first generation.
+          } else {
+              audioDuration = flight.audio_duration;
+          }
+          audioGenerated = true; // File exists
+        } else {
+          sendToLogsService({ ...logContext, language: lang, log_type: "AUDIO_GENERATION_START", message: "Generating audio file." });
+          const sequence = await getAnnouncementSequence(flight.announcement_type);
+          if (!sequence) {
+            sendToLogsService({ ...logContext, language: lang, log_type: "ERROR", message: `No sequence for type '${flight.announcement_type}'.` });
+            continue; 
+          }
+          const clips = await getAudioFiles(sequence, flight, lang);
+          if (!clips || clips.length === 0) {
+            sendToLogsService({ ...logContext, language: lang, log_type: "ERROR", message: "No audio clips found." });
+            continue; 
+          }
+          const mergeResult = await mergeAudioFiles(clips, outputFileName);
+          if (!mergeResult || !mergeResult.filename) {
+            sendToLogsService({ ...logContext, language: lang, log_type: "ERROR", message: "Failed to merge audio." });
+            continue; 
+          }
+          audioDuration = mergeResult.duration;
+          audioGenerated = true;
+          sendToLogsService({ ...logContext, language: lang, log_type: "AUDIO_GENERATED", message: "Audio generated successfully.", details: { file: mergeResult.filename, duration: audioDuration } });
+        }
+
+        if (audioGenerated) {
+            try {
+                // Set this specific language version as ready for the scheduler
+                await afasDb.execute(
+                  `UPDATE active_playlist 
+                   SET announcement_status = 'ReadyForScheduler', 
+                       current_announcement_language = ?, 
+                       current_audio_path = ?,
+                       audio_duration = ? 
+                   WHERE id = ? AND (announcement_status = 'Pending' OR announcement_status IS NULL OR current_announcement_language != ? OR announcement_status != 'Completed')`,
+                  [lang, outputFileName, audioDuration, flight.id, lang]
+                );
+                sendToLogsService({ ...logContext, language: lang, log_type: "FLIGHT_READY_FOR_SCHEDULER", message: `Set to 'ReadyForScheduler'.`, details: { file: outputFileName, duration: audioDuration } });
+                languageProcessedThisCycle = true;
+                break; // Process only one language per flight per worker cycle
+            } catch (dbErr) {
+                sendToLogsService({ ...logContext, language: lang, log_type: "ERROR", message: `DB Error updating to ReadyForScheduler.`, details: { error: dbErr.message } });
+            }
+        }
+      } // End language loop
+
+      if (!languageProcessedThisCycle) {
+          // If loop completed without processing any language (e.g., all had errors or conditions not met)
+          sendToLogsService({ ...logContext, log_type: "INFO", message: "No new language version processed for scheduler in this cycle for this flight." });
+      }
+
+    } // End flight loop
+  } catch (err) {
+    console.error("WORKER: ❌ Top-level error:", err?.message || err, err?.stack);
+    sendToLogsService({ log_type: "ERROR", message: `Worker cycle failed: ${err?.message || 'Unknown error'}` });
+  } finally {
+    console.log(`WORKER: ✅ Cycle End ${cycleTime}`);
+    sendToLogsService({ log_type: "WORKER_CYCLE_END", message: "Flight announcer worker cycle finished." });
+  }
+};
+
+const workerInterval = parseInt(process.env.WORKER_INTERVAL_SECONDS || 30) * 1000;
+setInterval(checkAndAnnounceFlights, workerInterval);
+console.log(`🚀 Flight Announcer Worker Started. Interval: ${workerInterval/1000} seconds.`);
+checkAndAnnounceFlights(); // Initial run

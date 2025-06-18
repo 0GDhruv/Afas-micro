@@ -1,0 +1,151 @@
+db.config.js-
+import mysql from "mysql2/promise";
+
+const db = await mysql.createPool({
+  host: "localhost",
+  user: "root",
+  password: "Infosoft@123",  
+  database: "afas",
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+});
+
+export default db;
+
+
+
+
+
+
+settings.controller.js-
+import { getSettings, saveSettings } from "../models/settings.model.js";
+
+export const getConfig = async (req, res) => {
+  try {
+    const config = await getSettings();
+
+    if (!config) {
+      return res.status(200).json({
+        languages: { english: true, hindi: false, regional: false },
+        language_order: ["english", "hindi", "regional"],
+        frequency: 1,
+        audio_lag: 2,
+        advance_minutes: 15,
+      });
+    }
+
+    // ✅ config is already parsed in model
+    res.status(200).json(config);
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching settings", error: err.message });
+  }
+};
+
+export const updateConfig = async (req, res) => {
+  try {
+    const body = req.body;
+
+    if (!body.language_order || body.language_order.length === 0) {
+      return res.status(400).json({ message: "Language order is required." });
+    }
+
+    await saveSettings(body);
+    res.status(200).json({ message: "Settings saved successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Error saving settings", error: err.message });
+  }
+};
+
+
+
+settings.models.js-
+import db from "../config/db.config.js";
+
+export const getSettings = async () => {
+  const [rows] = await db.execute("SELECT * FROM settings LIMIT 1");
+
+  if (!rows.length) return null;
+
+  const row = rows[0];
+
+  // ✅ Only parse if it's a string (MySQL might already parse JSON as object)
+  const languages = typeof row.languages === "string"
+    ? JSON.parse(row.languages)
+    : row.languages;
+
+  const language_order = typeof row.language_order === "string"
+    ? JSON.parse(row.language_order)
+    : row.language_order;
+
+  return {
+    languages,
+    language_order,
+    frequency: row.frequency || 1,
+    audio_lag: row.audio_lag || 2,
+    advance_minutes: row.advance_minutes || 15,
+  };
+};
+
+export const saveSettings = async ({ languages, language_order, frequency, audio_lag, advance_minutes }) => {
+  const langJson = JSON.stringify(languages);
+  const orderJson = JSON.stringify(language_order);
+
+  console.log("💾 Saving to DB:", {
+    langJson,
+    orderJson,
+    frequency,
+    audio_lag,
+    advance_minutes,
+  });
+
+  await db.execute("DELETE FROM settings");
+  await db.execute(
+    `INSERT INTO settings (languages, language_order, frequency, audio_lag, advance_minutes)
+     VALUES (?, ?, ?, ?, ?)`,
+    [
+      langJson,
+      orderJson,
+      frequency || 1,
+      audio_lag || 2,
+      advance_minutes || 15,
+    ]
+  );
+};
+
+
+
+settings.route.js-
+import express from "express";
+import { getConfig, updateConfig } from "../controllers/settings.controller.js";
+
+const router = express.Router();
+router.get("/", getConfig);
+router.post("/", updateConfig);
+
+export default router;
+
+
+app.js-
+import express from "express";
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+import cors from "cors";
+import settingsRoutes from "./routes/settings.routes.js";
+
+dotenv.config();
+const app = express();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Middleware
+app.use(cors({ origin: "*" }));
+app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
+
+// API Routes only
+app.use("/settings", settingsRoutes);
+
+const PORT = process.env.PORT || 4010;
+app.listen(PORT, () => console.log(`⚙️ Settings Service running on http://localhost:${PORT}`));

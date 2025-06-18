@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scheduler | AFAS</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+  <div class="wrapper">
+    <div class="sidebar">
+      <h2>AFAS</h2>
+      <a href="/dashboard"><i class="fas fa-tachometer-alt fa-fw"></i> Dashboard</a>
+      <a href="/upload"><i class="fas fa-upload fa-fw"></i> Upload Audio</a>
+      <a href="/announcement-type"><i class="fas fa-bullhorn fa-fw"></i> Announcement Type</a>
+      <a href="/sequence"><i class="fas fa-list-ol fa-fw"></i> Sequence</a>
+      <a href="/scheduler" class="active"><i class="fas fa-calendar-alt fa-fw"></i> Scheduler</a>
+      <a href="/zones"><i class="fas fa-map-marker-alt fa-fw"></i> Zones</a>
+      <a href="/users"><i class="fas fa-users fa-fw"></i> Users</a>
+      <a href="/permissions"><i class="fas fa-user-shield fa-fw"></i> Permissions</a>
+      <a href="/settings"><i class="fas fa-cog fa-fw"></i> Global Settings</a>
+      <a href="/tts-utility"><i class="fas fa-microphone-lines fa-fw"></i> TTS Utility</a>
+      <a href="/logs"><i class="fas fa-history fa-fw"></i> System Logs</a>
+    </div>
+
+    <main class="content">
+      <header>
+        <h1>Schedule Special Audio Messages</h1>
+        <button class="logout-btn" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+      </header>
+
+      <section class="form-section">
+        <h2>Create/Edit Scheduled Message</h2>
+        <form id="scheduler-form">
+          <input type="hidden" id="edit-id"> <div class="form-group">
+            <label for="messageName">Message Name:</label>
+            <input type="text" id="messageName" required placeholder="e.g., Weekly Maintenance Reminder">
+          </div>
+          <div class="form-group">
+            <label for="messageLanguage">Language:</label>
+            <select id="messageLanguage" required>
+              <option value="">-- Select Language --</option>
+              </select>
+          </div>
+          <div class="form-group">
+            <label for="audioFileMessage">Audio File (from Uploaded Special Messages):</label>
+            <select id="audioFileMessage" required>
+                <option value="">-- Select Audio File --</option>
+                </select>
+            <small>Upload special messages via the "Upload Audio" page.</small>
+          </div>
+          <div class="form-group">
+            <label for="transcriptionMessage">Transcription (Auto-filled from selected audio):</label>
+            <input type="text" id="transcriptionMessage" readonly placeholder="Transcription of selected audio...">
+          </div>
+          <div class="form-group">
+            <label for="startDate">Start Date:</label>
+            <input type="date" id="startDate" required>
+          </div>
+          <div class="form-group">
+            <label for="endDate">End Date:</label>
+            <input type="date" id="endDate" required>
+          </div>
+          <div class="form-group">
+            <label>Timings (HH:MM format, add multiple if needed):</label>
+            <div id="timing-container">
+              <input type="time" class="timing-field" required>
+            </div>
+            <button type="button" id="add-timing-btn" class="secondary-action-btn"><i class="fas fa-plus"></i> Add Time</button>
+          </div>
+          <div class="form-group">
+            <label for="frequencyDays">Frequency (Select days of the week):</label>
+            <select id="frequencyDays" multiple required>
+              <option value="Monday">Monday</option>
+              <option value="Tuesday">Tuesday</option>
+              <option value="Wednesday">Wednesday</option>
+              <option value="Thursday">Thursday</option>
+              <option value="Friday">Friday</option>
+              <option value="Saturday">Saturday</option>
+              <option value="Sunday">Sunday</option>
+            </select>
+            <small>Hold Ctrl/Cmd to select multiple days.</small>
+          </div>
+          <button type="submit" id="scheduleSubmitBtn"><i class="fas fa-calendar-check"></i> Schedule Message</button>
+        </form>
+      </section>
+
+      <section class="table-section">
+        <h2>Currently Scheduled Messages</h2>
+        <input type="text" id="search-box" placeholder="Search scheduled messages by name...">
+        <div id="scheduleTableContainer">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Name</th>
+                  <th>Language</th>
+                  <th>Audio File</th>
+                  <th>Timings</th>
+                  <th>Date Range</th>
+                  <th>Frequency (Days)</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="schedule-table-body">
+                <tr><td colspan="8" class="loading-text">Loading scheduled messages...</td></tr>
+              </tbody>
+            </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="../js/base.js"></script>
+  <script src="../js/scheduler.js"></script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Dashboard | AFAS{% endblock %}
+{% block header %}AFAS Dashboard{% endblock %}
+
+{% block content %}
+<h2>Active Announcements</h2>
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Announcement</th>
+      <th>Status</th>
+      <th>Flight</th>
+      <th>Airline</th>
+      <th>City</th>
+      <th>Gate</th>
+      <th>Time</th>
+      <th>Seq</th>
+    </tr>
+  </thead>
+  <tbody id="announcementTableBody"></tbody>
+</table>
+{% endblock %}
+
+{% block scripts %}
+<script src="../js/dashboard.js"></script>
+{% endblock %}

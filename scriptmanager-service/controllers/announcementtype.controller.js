@@ -1,98 +1,81 @@
+// script-manager-service/controllers/announcementtype.controller.js
 import db from "../config/db.config.js";
 import axios from "axios";
 
-// ✅ Fetch languages dynamically from Upload Service
+const LOGS_SERVICE_URL = process.env.LOGS_SERVICE_URL || "http://localhost:4025/api/logs";
+const SERVICE_NAME = "ScriptManagerService_AnnouncementType";
+
+async function sendToLogsService(logData) {
+  try {
+    await axios.post(LOGS_SERVICE_URL, { service_name: SERVICE_NAME, ...logData });
+  } catch (error) { console.error(`${SERVICE_NAME} - Error sending log:`, error.message); }
+}
+
 export const getLanguages = async (req, res) => {
   try {
-    console.log("📢 Fetching languages from Upload Service...");
-    const response = await axios.get("http://localhost:4003/languages");
-    console.log("✅ Languages Fetched:", response.data);
+    const response = await axios.get("http://localhost:4003/languages"); // From Upload Service
     res.json(response.data);
   } catch (err) {
-    console.error("❌ Error fetching languages from Upload Service:", err.message);
+    sendToLogsService({ log_type: "ERROR", message: "Error fetching languages from Upload Service.", details: { error: err.message } });
     res.status(500).json({ message: "Error fetching languages", error: err.message });
   }
 };
 
-// ✅ Fetch announcement types for a selected language
 export const getAnnouncementTypes = async (req, res) => {
-  const response = await axios.get("http://localhost:4003/languages");
-  
-  const { language } = req.query;
-  if (!language) {
-    console.error("🚨 No language provided in request! Expected format: /announcementtype?language=English");
-    return res.status(400).json({ message: "Language parameter is required." });
+  const { language, area } = req.query;
+  if (!language || !area) {
+    return res.status(400).json({ message: "Language and Area are required." });
   }
-
   try {
-    console.log(`🔍 Fetching announcement types for language: ${language}`);
     const [types] = await db.execute(
-      "SELECT type FROM announcement_types WHERE language = ?",
-      [language]
+      "SELECT type FROM announcement_types WHERE language = ? AND area = ?",
+      [language, area]
     );
-
-    console.log("✅ Fetched announcement types:", types);
     res.json(types.map(row => row.type));
   } catch (err) {
-    console.error("❌ Error fetching announcement types:", err.message);
+    sendToLogsService({ log_type: "ERROR", message: `Error fetching announcement types for ${language}/${area}.`, details: { error: err.message } });
     res.status(500).json({ message: "Database error", error: err.message });
   }
 };
 
-// ✅ Add a new announcement type for a selected language
 export const addAnnouncementType = async (req, res) => {
-  const { language, type } = req.body;
-
-  if (!language || !type) {
-    return res.status(400).json({ message: "Both language and type are required." });
+  const { language, type, area } = req.body;
+  if (!language || !type || !area) {
+    return res.status(400).json({ message: "Language, Type, and Area are required." });
   }
-
   try {
-    console.log(`➕ Adding new announcement type: ${type} for language: ${language}`);
-    
-    const [existing] = await db.execute(
-      "SELECT type FROM announcement_types WHERE language = ? AND type = ?",
-      [language, type]
-    );
-
-    if (existing.length > 0) {
-      return res.status(409).json({ message: "❌ Announcement type already exists!" });
-    }
-
     await db.execute(
-      "INSERT INTO announcement_types (language, type) VALUES (?, ?)",
-      [language, type]
+      "INSERT INTO announcement_types (language, type, area) VALUES (?, ?, ?)",
+      [language, type, area]
     );
-
-    console.log("✅ Announcement Type added successfully!");
+    sendToLogsService({ log_type: "ANNOUNCEMENT_TYPE_ADDED", message: `Added type: ${type} for ${language}/${area}.`, details: req.body });
     res.status(201).json({ message: "Announcement type added successfully." });
   } catch (err) {
-    console.error("❌ Error adding announcement type:", err.message);
+    sendToLogsService({ log_type: "ERROR", message: `Error adding announcement type: ${type}.`, details: { ...req.body, error: err.message } });
     res.status(500).json({ message: "Database error", error: err.message });
   }
 };
 
-// ✅ Delete an announcement type for a selected language
 export const deleteAnnouncementType = async (req, res) => {
-  const { type } = req.params;
-  const { language } = req.query;
-
-  if (!language || !type) {
-    return res.status(400).json({ message: "Language and type are required." });
+  const { type: typeName } = req.params; // Renamed for clarity
+  const { language, area } = req.query; // Area should also be part of the key for deletion
+  if (!language || !typeName || !area) {
+    return res.status(400).json({ message: "Language, Type name, and Area are required for deletion." });
   }
-
   try {
-    console.log(`🗑 Deleting announcement type: ${type} for language: ${language}`);
-
-    await db.execute(
-      "DELETE FROM announcement_types WHERE language = ? AND type = ?",
-      [language, type]
+    const [result] = await db.execute(
+      "DELETE FROM announcement_types WHERE language = ? AND type = ? AND area = ?",
+      [language, typeName, area]
     );
-
-    console.log("✅ Announcement Type deleted successfully!");
-    res.status(204).send();
+    if (result.affectedRows > 0) {
+        sendToLogsService({ log_type: "ANNOUNCEMENT_TYPE_DELETED", message: `Deleted type: ${typeName} for ${language}/${area}.` });
+        res.status(200).json({ message: "Announcement type deleted successfully." }); // Send 200 with message
+    } else {
+        sendToLogsService({ log_type: "WARNING", message: `Attempted to delete non-existent type: ${typeName} for ${language}/${area}.` });
+        res.status(404).json({ message: "Announcement type not found for the given language and area." });
+    }
   } catch (err) {
-    console.error("❌ Error deleting announcement type:", err.message);
+    sendToLogsService({ log_type: "ERROR", message: `Error deleting announcement type: ${typeName}.`, details: { language, area, error: err.message } });
     res.status(500).json({ message: "Database error", error: err.message });
   }
 };

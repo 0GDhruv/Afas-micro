@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title><%= title %></title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div class="app-wrapper">
+    <%- include("sidebar") %>
+    <div class="main-container">
+      <%- include("header") %>
+      <main class="main-content">
+        <%- body %>
+      </main>
+    </div>
+  </div>
+  <script src="/js/base.js"></script>
+  <% if (script) { %>
+    <script src="/js/<%= script %>"></script>
+  <% } %>
+</body>
+</html>

@@ -1,42 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard</title>
-  <link rel="stylesheet" href="/css/styles.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Active Announcements</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="top-bar">
-    <h1>Welcome to AFAS</h1>
-    <button id="logout-button">Logout</button>
-  </header>
 
-  <nav class="side-nav">
-    <ul>
-      <li><a href="/" class="active">Dashboard</a></li>
-      <li><a href="/upload">Upload Audio</a></li>
-      <li><a href="/scheduler">Scheduler</a></li>
-    </ul>
-  </nav>
-
-  <main class="main-content">
     <h2>Active Announcements</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Sr. No.</th>
-          <th>Name</th>
-          <th>Time</th>
-          <th>Sequence</th>
-        </tr>
-      </thead>
-      <tbody id="active-announcements">
-        <!-- Active announcements will be dynamically populated here -->
-      </tbody>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>Sr. No.</th>
+                <th>Announcement Name</th>
+                <th>Status</th>
+                <th>Flight Code</th>
+                <th>Airline</th>
+                <th>City</th>
+                <th>Gate</th>
+                <th>Time</th>
+                <th>Sequence</th>
+            </tr>
+        </thead>
+        <tbody id="announcementTableBody"></tbody>
     </table>
-  </main>
 
-  <script src="/js/dashboard.js"></script>
+    <script>
+        async function loadActiveAnnouncements() {
+            try {
+                const response = await fetch("http://localhost:4005/playlist/active");
+                const announcements = await response.json();
+
+                const tableBody = document.getElementById("announcementTableBody");
+                tableBody.innerHTML = "";
+
+                announcements.forEach((announcement, index) => {
+                    const row = document.createElement("tr");
+
+                    row.innerHTML = `
+                        <td>${index + 1}</td>
+                        <td>${announcement.announcement_name}</td>
+                        <td>${announcement.status}</td>
+                        <td>${announcement.flight_code || "--"}</td>
+                        <td>${announcement.airline_name || "--"}</td>
+                        <td>${announcement.city_name || "--"}</td>
+                        <td>${announcement.gate_number || "--"}</td>
+                        <td>${announcement.time}</td>
+                        <td>${announcement.sequence}</td>
+                    `;
+
+                    tableBody.appendChild(row);
+                });
+            } catch (error) {
+                console.error("Error loading active announcements:", error);
+            }
+        }
+
+        loadActiveAnnouncements();
+        setInterval(loadActiveAnnouncements, 30000); // Refresh every 30s
+    </script>
+
 </body>
 </html>

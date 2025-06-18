@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard | AFAS</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+  <div class="wrapper">
+    <div class="sidebar">
+      <h2>AFAS</h2>
+      <a href="/dashboard" class="active"><i class="fas fa-tachometer-alt fa-fw"></i> Dashboard</a>
+      <a href="/upload"><i class="fas fa-upload fa-fw"></i> Upload Audio</a>
+      <a href="/announcement-type"><i class="fas fa-bullhorn fa-fw"></i> Announcement Type</a>
+      <a href="/sequence"><i class="fas fa-list-ol fa-fw"></i> Sequence</a>
+      <a href="/scheduler"><i class="fas fa-calendar-alt fa-fw"></i> Scheduler</a>
+      <a href="/zones"><i class="fas fa-map-marker-alt fa-fw"></i> Zones</a>
+      <a href="/users"><i class="fas fa-users fa-fw"></i> Users</a>
+      <a href="/permissions"><i class="fas fa-user-shield fa-fw"></i> Permissions</a>
+      <a href="/settings"><i class="fas fa-cog fa-fw"></i> Global Settings</a>
+      <a href="/tts-utility"><i class="fas fa-microphone-lines fa-fw"></i> TTS Utility</a>
+      <a href="/logs"><i class="fas fa-history fa-fw"></i> System Logs</a>
+    </div>
+
+    <main class="content">
+      <header>
+        <h1>Dashboard</h1>
+        <button class="logout-btn" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+      </header>
+
+      <section class="dashboard-section active-announcements-section">
+        <h2>Active Announcements</h2>
+        <div id="activeAnnouncementsTableContainer">
+          <table id="activeAnnouncementsTable">
+            <thead>
+              <tr>
+                <th>Sr. No.</th>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Flight</th>
+                <th>Time</th>
+                <th>Duration</th>
+                <th>Frequency (Playback)</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="activeAnnouncementsTableBody">
+              <tr>
+                <td colspan="8" class="loading-text">Loading announcements...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination-controls" id="announcementsPagination">
+          <button id="prevPageButton" disabled>&lt; Prev</button>
+          <span id="currentPageInfo">Page 1</span>
+          <button id="nextPageButton" disabled>Next &gt;</button>
+        </div>
+      </section>
+
+      <section class="dashboard-summary-grid">
+        <div class="summary-box" id="settingsPreviewBox">
+          <h3>Settings-Preview (Global)</h3>
+          <ul id="settingsPreviewList">
+            <li>Loading global settings...</li>
+          </ul>
+        </div>
+
+        <div class="summary-box" id="announcementSummaryBox">
+          <h3>Announcement-Summary</h3>
+          <p>Total Flights Today: <span id="totalFlightsToday">--</span></p>
+          <p>Announcements Done Today: <span id="announcementsDoneToday">--</span></p>
+          <p>Pending Announcements (Overall): <span id="pendingAnnouncements">--</span></p>
+        </div>
+
+        <div class="summary-box" id="uploadedAudiosBox">
+          <h3>Uploaded Audios</h3>
+          <ul id="uploadedAudiosList">
+            <li>Loading audio counts...</li>
+          </ul>
+          <div class="pagination-controls summary-pagination" id="uploadedAudiosPagination" style="display: none;">
+            <button id="prevAudiosPageBtn" class="summary-page-btn">&lt;</button>
+            <span id="audiosPageInfo" class="summary-page-info">Page 1 of 1</span>
+            <button id="nextAudiosPageBtn" class="summary-page-btn">&gt;</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="../js/base.js"></script>
+  <script src="../js/dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,217 @@
+db.config.js-
+import mysql from "mysql2/promise";
+
+const db = await mysql.createPool({
+  host: "localhost",
+  user: "root",
+  password: "Infosoft@123",  
+  database: "afas",
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+});
+
+export default db;
+
+export default db;
+
+
+upload.controller.js-
+import fs from "fs";
+import path from "path";
+import db from "../config/db.config.js";
+
+// Upload and Save Audio Data
+// ✅ Upload and Save Audio Data
+export const uploadAudio = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    const { audioType, transcription, remarks, language } = req.body;
+    const file = req.file;
+
+    // ✅ Create a proper upload directory
+    const uploadDir = path.join("uploads", language, audioType.replace(/\s/g, "").toLowerCase());
+    fs.mkdirSync(uploadDir, { recursive: true });
+
+    // ✅ Move file to directory
+    const filePath = path.join(uploadDir, file.originalname);
+    fs.renameSync(file.path, filePath);
+
+    // ✅ Save to database
+    const [result] = await db.execute(
+      "INSERT INTO audios (language, audioType, filePath, transcription, remarks) VALUES (?, ?, ?, ?, ?)",
+      [language, audioType, filePath.replace("uploads", ""), transcription, remarks]
+    );
+
+    res.status(201).json({ id: result.insertId, message: "Audio uploaded successfully" });
+  } catch (err) {
+    console.error("❌ Upload error:", err.message);
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+
+// Get All Audios by Language
+export const getAllAudios = async (req, res) => {
+  const { language } = req.query;
+
+  if (!language) {
+    console.error("🚨 Missing language parameter in request.");
+    return res.status(400).json({ message: "Language parameter is required." });
+  }
+
+  try {
+    console.log(`🔍 Fetching audios for language: ${language}`);
+
+    const [audios] = await db.execute("SELECT * FROM audios WHERE language = ?", [language]);
+
+    if (!audios || audios.length === 0) {
+      console.warn(`⚠ No audios found for language: ${language}`);
+      return res.json([]); // ✅ Return an empty array instead of an error
+    }
+
+    console.log("✅ Audios fetched successfully:", audios);
+    res.json(audios);
+  } catch (err) {
+    console.error("❌ Database error while fetching audios:", err.message);
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+
+// Delete Audio
+export const deleteAudio = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Fetch the audio record
+    const [audioRecords] = await db.execute("SELECT * FROM audios WHERE id = ?", [id]);
+
+    if (audioRecords.length === 0) {
+      return res.status(404).json({ message: "Audio not found" });
+    }
+
+    const audio = audioRecords[0];
+
+    // Delete the file from the filesystem
+    const filePath = path.join("uploads", audio.filePath);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    // Delete the record from the database
+    await db.execute("DELETE FROM audios WHERE id = ?", [id]);
+
+    res.status(204).send();
+  } catch (err) {
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+
+upload.routes.js-
+import express from "express";
+import multer from "multer";
+import { uploadAudio, getAllAudios, deleteAudio } from "../controllers/upload.controller.js";
+
+const router = express.Router();
+
+// ✅ Configure Multer Storage
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, "uploads/temp/"); // Temporary storage before renaming
+    },
+    filename: (req, file, cb) => {
+      cb(null, file.originalname); // Keep original filename
+    },
+  });
+const upload = multer({ dest: "uploads/temp" });
+
+router.post("/", upload.single("audio"), uploadAudio);
+router.get("/", getAllAudios); // ✅ Ensure this gets `?language=` correctly
+router.delete("/:id", deleteAudio);
+
+export default router;
+
+
+
+.env-
+PORT=4003
+
+
+app.js-
+// upload-service/app.js
+import express from "express";
+import fs from "fs";
+import cors from "cors";
+import path from "path";
+import dotenv from "dotenv";
+import uploadRoutes from "./routes/upload.routes.js";
+
+dotenv.config();
+const app = express();
+const __dirname = path.resolve();
+
+// ✅ Enable CORS for all origins (or restrict to frontend later)
+app.use(cors());
+
+// Serve static assets
+app.use(express.static(path.join(__dirname, "public")));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// API routes
+app.use("/upload", uploadRoutes);
+
+// Serve available languages
+app.get("/languages", (req, res) => {
+  const uploadDir = path.join(__dirname, "uploads");
+  try {
+    if (!fs.existsSync(uploadDir)) return res.json([]);
+    const languages = fs.readdirSync(uploadDir).filter(item =>
+      fs.statSync(path.join(uploadDir, item)).isDirectory()
+    );
+    res.json(languages);
+  } catch (err) {
+    console.error("❌ Error fetching languages:", err.message);
+    res.status(500).json({ message: "Error fetching languages", error: err.message });
+  }
+});
+
+// List audio files by language and type
+app.get("/audio-files", (req, res) => {
+  const { language, type } = req.query;
+  if (!language || !type) return res.status(400).json({ message: "Missing parameters" });
+
+  const audioDir = path.join(__dirname, "uploads", language, type);
+  if (!fs.existsSync(audioDir)) return res.json([]);
+
+  try {
+    const files = fs.readdirSync(audioDir).filter(file =>
+      fs.statSync(path.join(audioDir, file)).isFile()
+    );
+    res.json(files);
+  } catch (err) {
+    console.error("❌ Error fetching audio files:", err.message);
+    res.status(500).json({ message: "Error fetching audio files", error: err.message });
+  }
+});
+
+// Dynamic audio file serving
+app.get("/audio-file", (req, res) => {
+  const { category, filename, language } = req.query;
+  if (!category || !filename || !language) return res.status(400).json({ message: "Missing query params" });
+
+  const filePath = path.join(__dirname, "uploads", language, category, filename);
+  if (!fs.existsSync(filePath)) return res.status(404).send("File not found");
+
+  res.sendFile(filePath);
+});
+
+// Expose audio folders
+app.use("/audio/english", express.static(path.join(__dirname, "uploads", "english")));
+
+const PORT = process.env.PORT || 4003;
+app.listen(PORT, () => console.log(`✅ Upload Service running on http://localhost:${PORT}`));

@@ -31,6 +31,13 @@
   <!-- Main Content -->
   <main class="main-content">
     <h2>Sequence</h2>
+    <label for="area">Select Area *</label>
+<select id="area" onchange="loadAnnouncementTypes(document.querySelector('.language-tab.active')?.getAttribute('data-lang'))">
+  <option value="Arrival">Arrival</option>
+  <option value="Departure">Departure</option>
+  <option value="Common">Common</option>
+</select>
+
 
     <!-- Language Tabs -->
     <div class="language-tabs"></div>
@@ -39,6 +46,7 @@
     <form id="scriptmanager-form">
       <!-- Hidden field for script ID (used for editing) -->
 <input type="hidden" id="script-id">
+
 
 <label for="announcementType">Announcement Type *</label>
 <select id="announcementType" required>

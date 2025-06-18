@@ -1,0 +1,781 @@
+/* Reset and base styling */
+body, html {
+  margin: 0;
+  padding: 0;
+  font-family: "Segoe UI", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"; /* Added fallback fonts */
+  background-color: #111;
+  color: #eee;
+  height: 100%;
+  line-height: 1.6;
+  font-size: 16px; /* Base font size */
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+  transition: color 0.2s ease-in-out;
+}
+a:hover {
+    color: #0f0; /* AFAS Green for link hover */
+}
+
+button {
+  padding: 8px 12px;
+  background-color: #444;
+  color: #fff;
+  border: 1px solid #555; /* Added subtle border */
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+  font-size: 0.95em;
+}
+button:hover:not(:disabled) {
+  background-color: #555;
+  border-color: #666;
+}
+button:disabled {
+    background-color: #2a2a2a;
+    color: #555;
+    cursor: not-allowed;
+    border-color: #3a3a3a;
+}
+button i.fas, button i.far, button i.fab { /* Font Awesome icons in buttons */
+    margin-right: 6px;
+}
+
+
+/* Layout Wrapper */
+.wrapper {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* Sidebar Styling */
+.sidebar {
+  width: 230px; /* Slightly wider */
+  background-color: #000;
+  padding: 20px 0; /* Adjusted padding */
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #282828; /* Darker border */
+  height: 100vh;
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 1001;
+  overflow-y: auto;
+}
+.sidebar h2 {
+  text-align: center;
+  color: #0f0; /* AFAS Green for title */
+  font-size: 24px; /* Larger title */
+  margin-top: 0;
+  margin-bottom: 25px;
+  padding: 0 10px;
+  letter-spacing: 1px;
+}
+.sidebar a {
+  padding: 12px 20px; /* Consistent padding */
+  color: #ccc;
+  border-left: 4px solid transparent;
+  margin-bottom: 2px; /* Reduced margin */
+  text-decoration: none;
+  display: flex; /* For icon alignment */
+  align-items: center;
+  font-size: 0.95em;
+  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out, border-left-color 0.2s ease-in-out;
+}
+.sidebar i.fa-fw {
+    margin-right: 10px; /* Space between icon and text */
+    width: 20px; /* Ensure icons align */
+    text-align: center;
+}
+.sidebar a:hover {
+  background-color: #1a1a1a; /* Darker hover */
+  color: #0f0; /* AFAS Green on hover */
+  border-left-color: #0f0;
+}
+.sidebar a.active {
+  background-color: #222; /* Active background */
+  color: #0f0;
+  border-left-color: #0f0;
+  font-weight: 600; /* Slightly bolder */
+}
+
+/* Top Header Styling */
+header {
+  height: 60px;
+  background-color: #111;
+  border-bottom: 1px solid #2a2a2a;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 25px;
+  position: fixed;
+  top: 0;
+  left: 230px; /* Match sidebar width */
+  right: 0;
+  z-index: 1000;
+}
+header h1 {
+  font-size: 1.6em;
+  font-weight: 300;
+  color: #e0e0e0;
+  margin: 0;
+}
+header h1 #flightNumberDisplay { /* For flight settings page */
+    color: #0f0;
+    font-weight: 500;
+}
+button.logout-btn {
+  background-color: #333;
+  border: 1px solid #555;
+  padding: 8px 15px;
+  border-radius: 4px;
+  color: #fff;
+}
+button.logout-btn:hover {
+  background-color: #d32f2f;
+  border-color: #c00;
+  color: #fff;
+}
+
+/* Main Content Area Styling */
+.content, .main-content { /* .main-content was used on some older pages */
+  flex: 1;
+  padding: 30px; /* More padding */
+  margin-left: 230px; /* Account for fixed sidebar */
+  margin-top: 60px; /* Account for fixed header */
+  overflow-y: auto;
+  background-color: #111; /* Ensure content area also has the base background */
+}
+
+/* Section Styling (for dashboard, settings, upload form etc.) */
+.dashboard-section, .settings-section, .form-section, .table-section {
+  margin-bottom: 30px;
+  background-color: #1c1c1c; /* Consistent card background */
+  padding: 20px 25px;
+  border-radius: 8px;
+  border: 1px solid #282828; /* Subtle border for cards */
+  box-shadow: 0 3px 6px rgba(0,0,0,0.25); /* Softer shadow */
+}
+.dashboard-section h2, .settings-section h2, .form-section h2, .table-section h2 {
+  margin-top: 0;
+  border-bottom: 1px solid #333;
+  padding-bottom: 12px;
+  margin-bottom: 20px;
+  font-size: 1.4em; /* Consistent section titles */
+  font-weight: 400;
+  color: #0f0; /* AFAS Green for section titles */
+}
+
+
+/* General Table Styling */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0; /* Handled by section padding or table container */
+  background-color: transparent; /* Table background handled by container like #activeAnnouncementsTableContainer */
+}
+th, td {
+  padding: 12px 15px;
+  border: 1px solid #333; /* Keep this for structure within tables */
+  text-align: left;
+  vertical-align: middle;
+}
+th {
+  background-color: #2a2a2a; /* Darker header background */
+  color: #0f0; /* AFAS Green for table headers */
+  font-weight: 600; /* Bolder headers */
+  text-transform: uppercase;
+  font-size: 0.9em;
+  letter-spacing: 0.5px;
+}
+tbody tr:hover {
+  background-color: #282828; /* Hover effect for table rows */
+}
+td {
+    color: #ccc; /* Default text color for table data */
+}
+.loading-text, .no-data-text { /* For table loading/empty states */
+    text-align: center !important; /* Override default left align */
+    font-style: italic;
+    color: #888;
+    padding: 20px !important;
+}
+
+
+/* General Form Styling */
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px; /* Spacing between form groups */
+  margin-bottom: 0; /* Handled by section padding */
+}
+.form-group {
+    margin-bottom: 0; /* Using gap on form for spacing */
+}
+form label {
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #ddd;
+  display: block;
+  font-size: 0.95em;
+}
+form input[type="text"],
+form input[type="email"],
+form input[type="password"],
+form input[type="number"],
+form input[type="date"],
+form input[type="time"],
+form select,
+form textarea {
+  padding: 10px 12px;
+  background-color: #222;
+  color: #eee;
+  border: 1px solid #444;
+  border-radius: 4px;
+  width: 100%;
+  box-sizing: border-box; /* Important for width calculation */
+  font-size: 1em;
+}
+form input:focus,
+form select:focus,
+form textarea:focus {
+  outline: none;
+  border-color: #0f0; /* AFAS green accent on focus */
+  box-shadow: 0 0 0 3px rgba(0, 255, 0, 0.15); /* Softer focus glow */
+}
+form button[type="submit"] {
+  width: fit-content;
+  background-color: #0f0; /* AFAS green for primary actions */
+  color: #111;
+  font-weight: bold;
+  padding: 10px 20px;
+  margin-top: 10px; /* Space above button */
+  border: none; /* Primary buttons might not need border */
+}
+form button[type="submit"]:hover {
+  background-color: #0d0; /* Darker green on hover */
+}
+form small { /* For help text below inputs/lists */
+    display: block;
+    margin-top: 5px;
+    font-size: 0.85em;
+    color: #999;
+}
+/* Status messages for forms (like upload, settings) */
+#uploadStatus, #loadingMessage, #errorMessage,
+#flightLoadingMessage, #flightErrorMessage {
+    text-align: center;
+    padding: 10px;
+    margin-top: 10px;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+#uploadStatus[style*="color: red"], /* For legacy error indication */
+#errorMessage, #flightErrorMessage, /* General error messages */
+.error-message /* Class based error message */ {
+    background-color: rgba(239, 83, 80, 0.15);
+    border: 1px solid rgba(239, 83, 80, 0.4);
+    color: #ff8a80;
+}
+#uploadStatus[style*="color: #0f0"], /* For legacy success indication */
+.success-message /* Class based success message */ {
+    background-color: rgba(0, 200, 83, 0.15);
+    border: 1px solid rgba(0, 200, 83, 0.4);
+    color: #69f0ae;
+}
+.info-message { /* For 'Synthesizing...' or initial state */
+    background-color: rgba(80, 120, 180, 0.15);
+    border-color: rgba(80, 120, 180, 0.4);
+    color: #8ab4f8;
+}
+.warning-message {
+    background-color: rgba(255, 160, 0, 0.15);
+    border-color: rgba(255, 160, 0, 0.4);
+    color: #ffd180;
+}
+
+
+/* Language Tabs Styling */
+.language-tabs {
+  margin-bottom: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.language-tab, .lang-tab, .lang-btn { /* Common class for all language tab buttons */
+  background-color: #282828;
+  border: 1px solid #444;
+  color: white;
+  padding: 8px 15px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+  font-size: 0.9em;
+}
+.language-tab.active, .lang-tab.active, .lang-btn.active {
+  background-color: #0f0;
+  border-color: #0f0;
+  color: #111;
+  font-weight: bold;
+}
+#languageTabsLoading { /* For upload page language tabs loading text */
+    font-style: italic;
+    color: #888;
+    padding: 10px 0;
+}
+
+
+/* Draggable Language List (for Settings pages) */
+.draggable-list {
+  list-style: none;
+  padding: 10px;
+  border: 1px solid #444;
+  background: #282828; /* Slightly lighter than input fields */
+  color: #fff;
+  min-height: 80px;
+  max-width: 350px; /* Max width for the list */
+  margin-bottom: 5px; /* Space before the small help text */
+  border-radius: 4px;
+}
+.draggable-list li {
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  background-color: #333; /* Background for each draggable item */
+  border: 1px solid #484848;
+  border-radius: 3px;
+  cursor: move;
+  user-select: none; /* Prevent text selection while dragging */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.draggable-list li:last-child { margin-bottom: 0; }
+.draggable-list li:hover { background-color: #3a3a3a; }
+.draggable-list li[style*="opacity: 0.5"] { /* Style for item being dragged */
+    background-color: #4CAF50; /* Highlight color when dragging */
+    color: #fff;
+}
+
+
+/* Input Specifics & Enhancements */
+form input[type="time"] { width: auto; min-width: 130px; }
+form select[multiple] { height: auto; min-height: 120px; } /* For multi-select boxes */
+
+input[type="file"] { /* File input on Upload page */
+  padding: 8px;
+  background-color: #282828;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #ccc; /* Color of "No file chosen" text */
+}
+input[type="file"]::file-selector-button { /* Styling the button part of file input */
+  background-color: #0f0; /* AFAS Green */
+  color: #111;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 3px;
+  cursor: pointer;
+  margin-right: 10px;
+  font-weight: 500; /* Make button text slightly bolder */
+}
+input[type="file"]::file-selector-button:hover { background-color: #0d0; } /* Darker green on hover */
+
+.language-checkboxes { /* Container for language checkboxes on settings pages */
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px 25px; /* Row and column gap */
+    margin-bottom: 10px;
+}
+.language-checkboxes label { /* Individual checkbox label */
+    font-weight: normal;
+    color: #ddd;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+}
+.language-checkboxes input[type="checkbox"] {
+    width: auto; /* Override form default width */
+    margin-right: 8px;
+    accent-color: #0f0; /* Color of the checkbox itself */
+    transform: scale(1.1); /* Slightly larger checkbox for better visibility */
+}
+.inline-checkbox-label { /* For "Enable" checkboxes next to selects (e.g., regional language) */
+    display: inline-flex !important;
+    align-items: center;
+    font-weight: normal !important;
+    margin-left: 10px; /* Space from the select dropdown */
+}
+.inline-checkbox-label input[type="checkbox"] { width: auto; margin-right: 5px; }
+
+
+/* === Dashboard Page Specific Styles === */
+#activeAnnouncementsTableContainer { /* Container for the active announcements table */
+  background-color: #222; /* Dark background for the table area */
+  border: 1px solid #333;
+  border-radius: 5px;
+  overflow-x: auto; /* Allow horizontal scroll on small screens */
+}
+/* #activeAnnouncementsTable th is covered by general th styling */
+
+.action-btn { /* General class for action buttons within tables */
+    padding: 6px 10px;
+    font-size: 0.85em;
+    margin-right: 5px; /* If multiple buttons in a cell */
+    background-color: #5c6bc0; /* Example: Indigo for general actions */
+    color: white;
+    border: none;
+    border-radius: 3px;
+}
+.action-btn:hover { background-color: #3949ab; } /* Darker on hover */
+.action-btn i { margin-right: 4px; }
+
+#activeAnnouncementsTable .settings-btn { /* Specific style for flight settings button */
+    padding: 5px 8px; /* Make it small */
+    font-size: 0.9em; /* Adjust icon size if needed */
+    line-height: 1; /* Helps align icon if it was text */
+}
+#activeAnnouncementsTable .settings-btn i {
+    margin-right: 0; /* No margin if icon only */
+}
+
+
+.pagination-controls { /* Common pagination controls style */
+  text-align: center;
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+}
+.pagination-controls button { /* Buttons within pagination */
+  background-color: #333;
+  color: #fff;
+  border: 1px solid #555;
+  padding: 8px 15px;
+  border-radius: 4px;
+}
+.pagination-controls button:hover:not(:disabled) { background-color: #0f0; color: #111; }
+#currentPageInfo, #pageInfo /* Page info text in pagination */ {
+  color: #ccc;
+  font-size: 0.9em;
+}
+
+.dashboard-summary-grid { /* Grid for summary boxes on dashboard */
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); /* Responsive columns */
+  gap: 25px;
+}
+.summary-box { /* Individual summary box */
+  background-color: #1c1c1c;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid #282828;
+  box-shadow: 0 3px 6px rgba(0,0,0,0.25);
+}
+.summary-box h3 { /* Title within summary box */
+  margin-top: 0;
+  font-size: 1.1em;
+  color: #0f0; /* AFAS Green */
+  margin-bottom: 15px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #333;
+}
+.summary-box p, .summary-box ul { font-size: 0.9em; margin-bottom: 10px; color: #ccc; }
+.summary-box ul { list-style: none; padding-left: 0; }
+.summary-box ul li { /* List items in summary (e.g., uploaded audios) */
+  padding: 8px 0;
+  border-bottom: 1px dotted #333;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.summary-box ul li:last-child { border-bottom: none; }
+.summary-box span { /* For dynamic values (counts) in summary boxes */
+  font-weight: bold;
+  color: #fff;
+}
+.summary-box .summary-pagination { /* Pagination within a summary box */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin-top: 15px;
+  padding-top: 10px;
+  border-top: 1px solid #333;
+}
+.summary-box .summary-page-btn { /* Pagination buttons in summary box */
+  background-color: #3a3a3a;
+  color: #ccc;
+  border: 1px solid #555;
+  padding: 4px 8px;
+  font-size: 0.8em;
+  border-radius: 3px;
+}
+.summary-box .summary-page-btn:hover:not(:disabled) { background-color: #0f0; color: #111; }
+.summary-box .summary-page-btn:disabled { background-color: #2a2a2a; color: #555; }
+.summary-box .summary-page-info { font-size: 0.85em; color: #aaa; }
+
+
+/* === Flight Settings Page Specific Styles === */
+.back-to-dashboard-btn { /* Button to go back to dashboard */
+  background-color: #444;
+  color: #fff;
+  padding: 8px 15px;
+  border-radius: 4px;
+  text-decoration: none;
+  font-size: 0.9em;
+  border: 1px solid #555;
+}
+.back-to-dashboard-btn:hover { background-color: #555; border-color: #666; }
+.back-to-dashboard-btn i { margin-right: 5px; }
+#globalRegionalLanguageNameDisplay { /* Display of global regional lang on flight settings */
+    font-style: italic;
+    font-weight: 500; /* Make it stand out a bit */
+    /* Color is set by JS based on whether a name exists */
+}
+
+
+/* === Upload Page Specific Styles === */
+#audioTableContainer { /* Also used for upload page table */
+  /* Styles are shared with dashboard table container */
+}
+#audio-table th { color: #0f0; } /* Shared style */
+#audio-table td button, #audio-table td .action-btn { /* Delete button on upload page */
+    padding: 5px 8px;
+    font-size: 0.8em;
+    background-color: #d32f2f; /* Red for delete */
+    color: white;
+    border: none;
+}
+#audio-table td button:hover, #audio-table td .action-btn:hover { background-color: #b71c1c; }
+#audioTablePagination button i { font-size: 0.8em; } /* Icons in upload page pagination */
+#audioTablePagination button { padding: 6px 12px; } /* Buttons for upload page pagination */
+
+
+/* === TTS Utility Page Specific Styles === */
+#responseAreaApp p, #statusMessageApp { /* General status paragraph styling */
+    /* Covered by general status message styles */
+}
+#audioPlayerContainerApp audio { /* Audio player on TTS utility */
+    width: 100%;
+    margin-top: 15px;
+    border-radius: 5px;
+}
+#audioPlayerContainerApp audio::-webkit-media-controls-panel { /* Styling for Chrome/Edge */
+  background-color: #2c2c2c;
+  border-radius: 5px;
+}
+#audioPlayerContainerApp audio::-webkit-media-controls-play-button,
+#audioPlayerContainerApp audio::-webkit-media-controls-volume-slider,
+#audioPlayerContainerApp audio::-webkit-media-controls-mute-button,
+#audioPlayerContainerApp audio::-webkit-media-controls-timeline,
+#audioPlayerContainerApp audio::-webkit-media-controls-current-time-display,
+#audioPlayerContainerApp audio::-webkit-media-controls-time-remaining-display {
+  /* Experimental: try to make controls fit dark theme, or use accent color */
+  /* filter: invert(1) sepia(0.5) saturate(5) hue-rotate(100deg); /* Example green-ish */
+  /* For a more subtle dark theme adaptation: */
+   filter: brightness(0.7) invert(1) contrast(1.2) saturate(0.5) hue-rotate(180deg) brightness(1.5);
+}
+.info-section { /* Info box on TTS utility page */
+    margin-top: 30px;
+    padding: 15px 20px;
+    background-color: #222;
+    border-radius: 5px;
+    border: 1px solid #333;
+}
+.info-section h3 {
+    color: #0f0;
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 1.2em;
+}
+.info-section p {
+    font-size: 0.95em;
+    color: #bbb;
+    line-height: 1.6;
+    margin-bottom: 10px;
+}
+.info-section code {
+    background-color: #333;
+    color: #0f0;
+    padding: 3px 6px;
+    border-radius: 3px;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+    font-size: 0.9em;
+}
+
+
+/* Search Boxes (General) */
+input[type="text"]#searchBox, /* Used on Upload, Zones page */
+input[type="text"]#search-box /* Used on Scheduler page */ {
+    padding: 10px 12px;
+    background-color: #222;
+    color: #eee;
+    border: 1px solid #444;
+    border-radius: 4px;
+    width: 100%;
+    max-width: 450px;
+    box-sizing: border-box;
+    margin-bottom: 20px;
+    display: block; /* To allow margin-bottom and control width */
+    font-size: 1em;
+}
+input[type="text"]#searchBox:focus,
+input[type="text"]#search-box:focus {
+    outline: none;
+    border-color: #0f0;
+    box-shadow: 0 0 0 3px rgba(0, 255, 0, 0.15);
+}
+
+/* Top bar class (from original, if used on pages other than dashboard) */
+.top-bar {
+  height: 60px;
+  background-color: #111;
+  border-bottom: 1px solid #2a2a2a;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 25px;
+  position: fixed;
+  top: 0;
+  left: 230px; /* Match sidebar width */
+  right: 0;
+  z-index: 1000;
+}
+.top-bar h1 {
+  font-size: 1.6em;
+  color: #e0e0e0;
+  margin: 0;
+  font-weight: 300;
+}
+    /* frontend-service/public/css/style.css additions */
+
+    .filters-section {
+        /* form-section class already provides most styling */
+        padding-bottom: 10px; /* Less bottom padding if filters are compact */
+    }
+
+    .log-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px 20px; /* Row and column gap */
+        align-items: flex-end; /* Align items to bottom for mixed height elements */
+    }
+
+    .filter-group {
+        display: flex;
+        flex-direction: column;
+        min-width: 180px; /* Minimum width for filter groups */
+    }
+    .filter-group label {
+        margin-bottom: 5px;
+        font-size: 0.9em;
+    }
+    .filter-group input[type="text"],
+    .filter-group input[type="date"],
+    .filter-group select {
+        /* General form input styles should apply */
+        padding: 8px 10px; /* Slightly smaller padding for filters */
+    }
+    .filter-group button {
+        padding: 8px 15px; /* Consistent button padding */
+        height: 38px; /* Align with input height */
+    }
+    .filter-group .secondary-action-btn {
+        background-color: #555;
+    }
+    .filter-group .secondary-action-btn:hover {
+        background-color: #666;
+    }
+
+
+    #logsTableContainer {
+        /* table-section class already provides most styling */
+        overflow-x: auto; /* For responsive tables */
+    }
+    #logsTable td, #logsTable th {
+        white-space: nowrap; /* Prevent text wrapping in cells initially */
+    }
+    #logsTable td:nth-child(6) { /* Message column */
+        white-space: normal; /* Allow message column to wrap */
+        min-width: 250px;
+        max-width: 400px; /* Limit width of message column */
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .view-details-btn {
+        background-color: #007bff; /* Blue for view */
+        color: white;
+        font-size: 0.85em;
+        padding: 4px 8px;
+    }
+    .view-details-btn:hover {
+        background-color: #0056b3;
+    }
+
+    /* Modal Styling */
+    .modal {
+      display: none; 
+      position: fixed; 
+      z-index: 2000; /* Higher than sidebar/header */
+      left: 0;
+      top: 0;
+      width: 100%; 
+      height: 100%; 
+      overflow: auto; 
+      background-color: rgba(0,0,0,0.6); /* Darker semi-transparent background */
+    }
+
+    .modal-content {
+      background-color: #2c2c2c; /* Dark background for modal */
+      margin: 10% auto; 
+      padding: 25px;
+      border: 1px solid #555;
+      width: 70%; 
+      max-width: 800px;
+      border-radius: 8px;
+      position: relative;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+      color: #eee;
+    }
+    .modal-content h2 {
+        margin-top: 0;
+        color: #0f0; /* AFAS Green */
+        border-bottom: 1px solid #444;
+        padding-bottom: 10px;
+        margin-bottom: 15px;
+    }
+
+    .close-modal-btn {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+      position: absolute;
+      top: 10px;
+      right: 20px;
+    }
+    .close-modal-btn:hover,
+    .close-modal-btn:focus {
+      color: #fff; /* White on hover */
+      text-decoration: none;
+      cursor: pointer;
+    }
+    #logDetailsJson {
+        background-color: #1e1e1e; /* Very dark background for pre */
+        padding: 15px;
+        border-radius: 4px;
+        border: 1px solid #333;
+        max-height: 400px;
+        overflow-y: auto;
+        white-space: pre-wrap; /* Wrap long lines */
+        word-break: break-all;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+        font-size: 0.9em;
+        color: #d4d4d4; /* Light text for pre */
+    }
+    

@@ -1,0 +1,566 @@
+db.config.js--
+import mysql from "mysql2/promise";
+import dotenv from "dotenv";
+
+// Load environment variables
+dotenv.config();
+
+// Create a connection pool
+const db = mysql.createPool({
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASSWORD || "Infosoft@123",
+  database: process.env.DB_NAME || "afas",
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+});
+
+export default db;
+
+
+
+schedular.controller.js--
+import axios from "axios";
+import db from "../config/db.config.js";
+import player from "play-sound";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const audioPlayer = player();
+
+const playAudio = (filePath) => {
+  return new Promise((resolve) => {
+    audioPlayer.play(filePath, (err) => {
+      if (err) console.error("🔴 Error playing audio:", err.message);
+      else console.log("🔊 Playing audio:", filePath);
+      resolve();
+    });
+  });
+};
+
+export const executeSchedules = async () => {
+  try {
+    console.log("⏰ Running Scheduler...");
+
+    const now = new Date();
+    const currentTime = now.toTimeString().slice(0, 5);
+    const currentDay = now.toLocaleString("en-US", { weekday: "short" });
+
+    // 1. 🔊 Play special messages
+    const [schedules] = await db.execute("SELECT * FROM schedules");
+    for (const schedule of schedules) {
+      const timings = Array.isArray(schedule.timing) ? schedule.timing : JSON.parse(schedule.timing);
+      const frequency = schedule.frequency?.split(",") || [];
+
+      if (
+        timings.includes(currentTime) &&
+        (frequency.includes("all") || frequency.includes(currentDay))
+      ) {
+        const audioPath = path.join(
+          __dirname,
+          "../../upload-service/uploads",
+          schedule.language,
+          "specialmessage",
+          schedule.audioId
+        );
+        console.log(`📢 Playing special message: ${schedule.name}`);
+        await playAudio(audioPath);
+      }
+    }
+
+    // 2. 🧠 Get settings
+    const { data: settings } = await axios.get("http://localhost:4010/settings");
+    const {
+      languages,
+      language_order,
+      frequency = 1,
+      audio_lag = 2,
+    } = settings;
+
+    // 3. 🎙 Fetch pending flight announcements
+    const { data: announcements } = await axios.get("http://localhost:4008/audio/active");
+    if (!announcements.length) {
+      console.log("📭 No active flight announcements.\n");
+      return;
+    }
+
+    // 4. 🔁 Sequential playback of flights
+    for (const { flight_number, audio_path, language } of announcements) {
+      console.log(`🎧 Playing Flight ${flight_number} → ${language}`);
+
+      const fullPath = path.join(__dirname, "../../audio-processing-service/output_audio", audio_path);
+      if (!fs.existsSync(fullPath)) {
+        console.warn(`⚠️ File not found: ${fullPath}`);
+        continue;
+      }
+
+      for (let i = 0; i < frequency; i++) {
+        console.log(`🔁 [${language.toUpperCase()}] Repeat ${i + 1}/${frequency}`);
+        await playAudio(fullPath);
+        if (i < frequency - 1) {
+          await new Promise((r) => setTimeout(r, audio_lag * 1000));
+        }
+      }
+
+      // ✅ Mark flight as announced
+      await axios.post("http://localhost:4008/audio/mark-announced", { flight_number });
+      console.log(`✅ Marked flight ${flight_number} as Completed`);
+
+      // ⏳ Wait before next flight
+      await new Promise((r) => setTimeout(r, audio_lag * 1000));
+    }
+
+  } catch (err) {
+    console.error("❌ Error in scheduler execution:", err?.message || err);
+  }
+};
+
+// ======== REST APIs ========
+
+export const getLanguages = async (req, res) => {
+  try {
+    const { data } = await axios.get("http://localhost:4003/languages");
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ message: "Upload Service error", error: err.message });
+  }
+};
+
+export const getAudioFiles = async (req, res) => {
+  try {
+    const { language } = req.query;
+    const { data } = await axios.get("http://localhost:4003/audio-files", {
+      params: { language, type: "specialmessage" },
+    });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ message: "Upload Service error", error: err.message });
+  }
+};
+
+export const createSchedule = async (req, res) => {
+  const { name, language, audioId, timings, startDate, endDate, frequency } = req.body;
+  try {
+    await db.execute(
+      "INSERT INTO schedules (name, language, audioId, timing, start_date, end_date, frequency) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [name, language, audioId, JSON.stringify(timings), startDate, endDate, frequency.join(",")]
+    );
+    res.status(201).send("Schedule created successfully.");
+  } catch (err) {
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+export const getSchedules = async (req, res) => {
+  try {
+    const [schedules] = await db.execute("SELECT * FROM schedules");
+    res.json(schedules);
+  } catch (err) {
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+export const deleteSchedule = async (req, res) => {
+  const { id } = req.params;
+  try {
+    await db.execute("DELETE FROM schedules WHERE id = ?", [id]);
+    res.status(204).send();
+  } catch (err) {
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+export const announceFlight = async (req, res) => {
+  const { flight_number, audio_path, language } = req.body;
+  if (!audio_path) return res.status(400).json({ message: "Missing audio_path" });
+
+  const fullPath = path.join(__dirname, "../../audio-processing-service/output_audio", audio_path);
+
+  if (!fs.existsSync(fullPath)) {
+    console.error("❌ Audio file not found:", fullPath);
+    return res.status(404).json({ message: "Audio file not found" });
+  }
+
+  try {
+    console.log(`🎧 Announcing Flight ${flight_number} from: ${fullPath}`);
+    await playAudio(fullPath);
+    res.status(200).json({ message: "Flight announcement played" });
+  } catch (err) {
+    console.error("❌ Playback error:", err.message);
+    res.status(500).json({ message: "Failed to play audio", error: err.message });
+  }
+};
+
+
+
+
+public/css/scheduler.css--
+/* General Layout */
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+  }
+  
+  .top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #333;
+    color: white;
+    padding: 10px 20px;
+  }
+  
+  .side-nav {
+    position: fixed;
+    top: 50px;
+    left: 0;
+    background-color: #444;
+    width: 200px;
+    height: 100%;
+    color: white;
+  }
+  
+  .side-nav ul {
+    list-style: none;
+    padding: 0;
+  }
+  
+  .side-nav ul li {
+    padding: 10px 20px;
+  }
+  
+  .side-nav ul li a {
+    color: white;
+    text-decoration: none;
+  }
+  
+  .side-nav ul li a.active {
+    background-color: #555;
+  }
+  
+  .main-content {
+    margin-left: 220px;
+    padding: 20px;
+  }
+  
+  /* Form Styling */
+  form {
+    margin-bottom: 20px;
+  }
+  
+  form label {
+    display: block;
+    margin: 10px 0 5px;
+  }
+  
+  form input, form select, form button {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+    padding: 8px;
+  }
+  
+
+
+
+  public/js/schedular.js--
+  async function loadLanguages() {
+  const response = await fetch("/scheduler/languages");
+  const languages = await response.json();
+
+  const languageDropdown = document.getElementById("language");
+  languageDropdown.innerHTML = "<option value='' disabled selected>Select a language</option>";
+
+  languages.forEach((language) => {
+    const option = document.createElement("option");
+    option.value = language;
+    option.textContent = language.charAt(0).toUpperCase() + language.slice(1);
+    languageDropdown.appendChild(option);
+  });
+}
+
+async function loadAudioFiles(language) {
+  const response = await fetch(`/scheduler/audio-files?language=${language}`);
+  const audioFiles = await response.json();
+
+  const audioDropdown = document.getElementById("audio");
+  audioDropdown.innerHTML = "<option value='' disabled selected>Select an announcement</option>";
+
+  audioFiles.forEach((file) => {
+    const option = document.createElement("option");
+    option.value = file;
+    option.textContent = file;
+    audioDropdown.appendChild(option);
+  });
+}
+
+document.getElementById("language").addEventListener("change", (e) => {
+  const selectedLanguage = e.target.value;
+  loadAudioFiles(selectedLanguage);
+});
+
+// Add new timing input
+document.getElementById("add-timing").addEventListener("click", () => {
+  const timingContainer = document.getElementById("timing-container");
+
+  const newTimingInput = document.createElement("input");
+  newTimingInput.type = "time";
+  newTimingInput.className = "timing-field";
+  timingContainer.appendChild(newTimingInput);
+});
+
+// Save a schedule
+document.getElementById("scheduler-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const name = document.getElementById("name").value;
+  const language = document.getElementById("language").value;
+  const audioId = document.getElementById("audio").value;
+
+  const timings = Array.from(document.querySelectorAll(".timing-field")).map((input) => input.value);
+  const startDate = document.getElementById("start-date").value;
+  const endDate = document.getElementById("end-date").value;
+
+  const frequency = Array.from(document.getElementById("frequency").selectedOptions).map((option) => option.value);
+
+  console.log("Submitting schedule:", { name, language, audioId, timings, startDate, endDate, frequency });
+
+  try {
+    const response = await fetch("/scheduler", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, language, audioId, timings, startDate, endDate, frequency }),
+    });
+
+    if (response.ok) {
+      alert("Schedule saved successfully!");
+      loadSchedules();
+    } else {
+      const error = await response.json();
+      console.error("Error response from server:", error);
+      alert("Error saving schedule: " + error.message);
+    }
+  } catch (error) {
+    console.error("Error saving schedule:", error.message);
+  }
+});
+
+
+async function loadSchedules() {
+  try {
+    const response = await fetch("/scheduler");
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch schedules: ${response.statusText}`);
+    }
+
+    const textResponse = await response.text(); // Get raw response
+    console.log("Raw response from /scheduler:", textResponse); // Debug log
+
+    const schedules = JSON.parse(textResponse.replace(/^\uFEFF/, "")); // Remove BOM if present
+    console.log("Parsed schedules:", schedules); // Debug log
+
+    const tableBody = document.getElementById("schedule-table");
+    tableBody.innerHTML = ""; // Clear the table
+
+    schedules.forEach((schedule, index) => {
+      // Directly use the timing field if it's already an array
+      const timings = Array.isArray(schedule.timing) ? schedule.timing : JSON.parse(schedule.timing);
+
+      // Parse frequency if it’s a stringified JSON array
+      let frequency;
+      try {
+        frequency = JSON.parse(schedule.frequency);
+      } catch (e) {
+        frequency = schedule.frequency; // Use as-is if not JSON
+      }
+
+      const row = `<tr>
+        <td>${index + 1}</td>
+        <td>${schedule.name || "Unnamed Schedule"}</td>
+        <td>${schedule.audioId}</td>
+        <td>${timings.join(", ")}</td>
+        <td>${new Date(schedule.start_date).toLocaleDateString()} - ${new Date(schedule.end_date).toLocaleDateString()}</td>
+        <td>${Array.isArray(frequency) ? frequency.join(", ") : frequency}</td>
+        <td><button onclick="deleteSchedule(${schedule.id})">Delete</button></td>
+      </tr>`;
+      tableBody.innerHTML += row;
+    });
+  } catch (error) {
+    console.error("Error loading schedules:", error.message);
+  }
+}
+
+
+
+
+
+// Delete a schedule
+async function deleteSchedule(id) {
+  try {
+    const response = await fetch(`/scheduler/${id}`, { method: "DELETE" });
+    if (response.ok) {
+      loadSchedules();
+    } else {
+      alert("Error deleting schedule.");
+    }
+  } catch (error) {
+    console.error("Error deleting schedule:", error.message);
+  }
+}
+
+loadLanguages();
+loadSchedules();
+
+
+
+public/schedular.html--
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scheduler</title>
+  <link rel="stylesheet" href="css/scheduler.css">
+</head>
+<body>
+  <header class="top-bar">
+    <h1>Welcome to AFAS</h1>
+    <button id="logout-button">Logout</button>
+  </header>
+
+  <nav class="side-nav">
+    <ul>
+      <li><a href="/dashboard">Dashboard</a></li>
+      <li><a href="/upload">Upload Audio</a></li>
+      <li><a href="/scheduler" class="active">Scheduler</a></li>
+    </ul>
+  </nav>
+
+  <main class="main-content">
+    <h2>Scheduler</h2>
+    <form id="scheduler-form">
+      <label for="name">Schedule Name:</label>
+      <input type="text" id="name" placeholder="Enter schedule name" required>
+    
+      <label for="language">Language:</label>
+      <select id="language" required></select>
+    
+      <label for="audio">Announcement:</label>
+      <select id="audio" required></select>
+    
+      <label for="timing">Timing:</label>
+      <div id="timing-container">
+        <input type="time" class="timing-field" required>
+        <button type="button" id="add-timing">+</button>
+      </div>
+    
+      <label for="start-date">From:</label>
+      <input type="date" id="start-date" required>
+    
+      <label for="end-date">To:</label>
+      <input type="date" id="end-date" required>
+    
+      <label for="frequency">Frequency:</label>
+      <select id="frequency" multiple>
+        <option value="all">Select All</option>
+        <option value="Mon">Monday</option>
+        <option value="Tue">Tuesday</option>
+        <option value="Wed">Wednesday</option>
+        <option value="Thu">Thursday</option>
+        <option value="Fri">Friday</option>
+        <option value="Sat">Saturday</option>
+        <option value="Sun">Sunday</option>
+      </select>
+      <button type="submit">Save Schedule</button>
+    </form>
+    
+
+    <h2>Schedules</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Sr. No.</th>
+          <th>Name</th>
+          <th>Announcement</th>
+          <th>Timing</th>
+          <th>From - To</th>
+          <th>Frequency</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="schedule-table"></tbody>
+    </table>    
+  </main>
+
+  <script src="js/scheduler.js"></script>
+</body>
+</html>
+
+
+
+schedular.routes.js--
+import express from "express";
+import { getLanguages, getAudioFiles, createSchedule, getSchedules, deleteSchedule,announceFlight} from "../controllers/schedular.controller.js";
+
+const router = express.Router();
+
+router.get("/languages", getLanguages); // Get available languages
+router.get("/audio-files", getAudioFiles); // Get audio files for a language
+router.post("/", createSchedule); // Create a new schedule
+router.get("/", getSchedules); // Get all schedules
+router.delete("/:id", deleteSchedule); // Delete a schedule
+router.post("/announce", announceFlight);
+
+export default router;
+
+
+
+app.js--
+import express from "express";
+import path from "path";
+import dotenv from "dotenv";
+import schedulerRoutes from "./routes/schedular.routes.js";
+import { executeSchedules } from "./controllers/schedular.controller.js";
+
+
+// Load environment variables
+dotenv.config();
+
+const app = express();
+const __dirname = path.resolve();
+
+// Middleware to parse JSON
+app.use(express.json());
+
+// Run the schedule executor every minute
+setInterval(() => {
+  console.log("Checking for schedules...");
+  executeSchedules();
+}, 60000); // 60 seconds
+
+
+// Serve static files (HTML, CSS, JS)
+app.use(express.static(path.join(__dirname, "public")));
+
+// API routes for scheduler
+app.use("/scheduler", schedulerRoutes);
+
+// Serve the Scheduler HTML page
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "scheduler.html"));
+});
+
+
+
+// Start the server
+const PORT = process.env.PORT || 4004;
+app.listen(PORT, () => {
+  console.log(`Scheduler Service running on http://localhost:${PORT}`);
+});
+
+

@@ -1,38 +1,33 @@
+// upload-service/app.js
 import express from "express";
 import fs from "fs";
+import cors from "cors";
 import path from "path";
+import dotenv from "dotenv";
 import uploadRoutes from "./routes/upload.routes.js";
 
+dotenv.config();
 const app = express();
 const __dirname = path.resolve();
 
-// Serve static files (CSS, JS, HTML) from the "public" directory
-app.use(express.static(path.join(__dirname, "public")));
+// ✅ Enable CORS for all origins (or restrict to frontend later)
+app.use(cors());
 
-// Serve the "uploads" directory for uploaded files
+// Serve static assets
+app.use(express.static(path.join(__dirname, "public")));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// API routes for upload
+// API routes
 app.use("/upload", uploadRoutes);
 
-// Serve the main upload.html page at the root URL
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "upload.html"));
-});
+// Serve available languages
 app.get("/languages", (req, res) => {
   const uploadDir = path.join(__dirname, "uploads");
-
   try {
-    if (!fs.existsSync(uploadDir)) {
-      console.warn("⚠ Uploads directory does not exist.");
-      return res.json([]); // ✅ Return empty array
-    }
-
-    const languages = fs.readdirSync(uploadDir).filter((item) =>
+    if (!fs.existsSync(uploadDir)) return res.json([]);
+    const languages = fs.readdirSync(uploadDir).filter(item =>
       fs.statSync(path.join(uploadDir, item)).isDirectory()
     );
-
-    console.log("✅ Available languages:", languages);
     res.json(languages);
   } catch (err) {
     console.error("❌ Error fetching languages:", err.message);
@@ -40,28 +35,18 @@ app.get("/languages", (req, res) => {
   }
 });
 
-
+// List audio files by language and type
 app.get("/audio-files", (req, res) => {
-  const { language, type } = req.query; // Get language and type from query params
-  if (!language || !type) {
-    console.error("🚨 Missing required parameters: language or type");
-    return res.status(400).json({ message: "Language and type are required." });
-  }
+  const { language, type } = req.query;
+  if (!language || !type) return res.status(400).json({ message: "Missing parameters" });
 
   const audioDir = path.join(__dirname, "uploads", language, type);
-  console.log(`🔍 Checking directory: ${audioDir}`);
+  if (!fs.existsSync(audioDir)) return res.json([]);
 
   try {
-    if (!fs.existsSync(audioDir)) {
-      console.warn(`⚠ Directory does not exist: ${audioDir}`);
-      return res.json([]); // ✅ Return an empty array if folder doesn't exist
-    }
-
-    const files = fs.readdirSync(audioDir).filter((file) =>
+    const files = fs.readdirSync(audioDir).filter(file =>
       fs.statSync(path.join(audioDir, file)).isFile()
     );
-
-    console.log("✅ Audio files found:", files);
     res.json(files);
   } catch (err) {
     console.error("❌ Error fetching audio files:", err.message);
@@ -69,9 +54,19 @@ app.get("/audio-files", (req, res) => {
   }
 });
 
+// Dynamic audio file serving
+app.get("/audio-file", (req, res) => {
+  const { category, filename, language } = req.query;
+  if (!category || !filename || !language) return res.status(400).json({ message: "Missing query params" });
 
-// Start the server
-const PORT = process.env.PORT || 4003;
-app.listen(PORT, () => {
-  console.log(`Upload Service running on port ${PORT}`);
+  const filePath = path.join(__dirname, "uploads", language, category, filename);
+  if (!fs.existsSync(filePath)) return res.status(404).send("File not found");
+
+  res.sendFile(filePath);
 });
+
+// Expose audio folders
+app.use("/audio/english", express.static(path.join(__dirname, "uploads", "english")));
+
+const PORT = process.env.PORT || 4003;
+app.listen(PORT, () => console.log(`✅ Upload Service running on http://localhost:${PORT}`));

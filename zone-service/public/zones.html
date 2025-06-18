@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Zone → Announcement Mapping</title>
+  <link rel="stylesheet" href="css/zones.css" />
+</head>
+<body>
+  <div class="sidebar">
+    <ul>
+      <li>Dashboard</li>
+      <li>Audio Type</li>
+      <li>Upload Audio</li>
+      <li>Announcement - Type</li>
+      <li>Sequence</li>
+      <li>Schedular</li>
+      <li>Zones</li>
+      <li class="active">Zone selector</li>
+      <li>Users</li>
+      <li>Permissions</li>
+    </ul>
+  </div>
+
+  <div class="main-content">
+    <h2>Zone → Announcement Mapping</h2>
+
+    <label for="zoneInput">Enter Zone:</label>
+    <input type="text" id="zoneInput" placeholder="e.g. Zone A" />
+
+    <label for="announcementDropdown">Select Announcement Type:</label>
+    <select id="announcementDropdown"></select>
+
+    <button onclick="addZoneMapping()">➕ Add Mapping</button>
+
+    <input type="text" id="searchBox" placeholder="Search" />
+
+    <table>
+      <thead>
+        <tr>
+          <th>SR.NO</th>
+          <th>Announcement Type</th>
+          <th>Zone</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="zoneTableBody"></tbody>
+    </table>
+  </div>
+
+  <script src="js/zones.js"></script>
+</body>
+</html>

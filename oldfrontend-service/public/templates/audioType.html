@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Audio Type | AFAS</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="top-bar">
+    <h1>AFAS Audio Types</h1>
+    <button onclick="logout()">Logout</button>
+  </header>
+
+  <nav class="side-nav">
+    <a href="/dashboard">Dashboard</a>
+    <a href="/audio-type" class="active">Audio Type</a>
+    <a href="/upload">Upload Audio</a>
+    <a href="/announcement-type">Announcement Type</a>
+    <a href="/sequence">Sequence</a>
+    <a href="/scheduler">Scheduler</a>
+    <a href="/zones">Zones</a>
+    <a href="/settings">Settings</a>
+  </nav>
+
+  <main class="main-content">
+    <h2>Upload Audio Files</h2>
+
+    <!-- Language Tabs -->
+    <div class="language-tabs" id="language-tabs"></div>
+
+    <!-- Upload Form -->
+    <form id="upload-form" enctype="multipart/form-data">
+      <label for="audioType">Audio Type *</label>
+      <select id="audioType" required>
+        <option value="specialmessage">Special Message</option>
+        <option value="std">Standard</option>
+        <option value="number">Number</option>
+        <option value="city">City</option>
+        <option value="airline">Airline</option>
+      </select>
+
+      <label for="audioFile">Select Audio File *</label>
+      <input type="file" id="audioFile" accept=".wav" required />
+
+      <label for="transcription">Transcription *</label>
+      <input type="text" id="transcription" required />
+
+      <label for="remarks">Remarks</label>
+      <input type="text" id="remarks" />
+
+      <button type="submit">Upload</button>
+    </form>
+
+    <!-- Uploaded Audios Table -->
+    <h2>Uploaded Audios</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Audio File</th>
+          <th>Transcription</th>
+          <th>Remarks</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="audio-table"></tbody>
+    </table>
+  </main>
+
+  <script src="/js/base.js"></script>
+  <script src="/js/audioType.js"></script>
+</body>
+</html>

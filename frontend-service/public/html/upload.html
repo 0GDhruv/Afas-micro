@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Upload Audio | AFAS</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+  <div class="wrapper">
+    <div class="sidebar">
+      <h2>AFAS</h2>
+      <a href="/dashboard"><i class="fas fa-tachometer-alt fa-fw"></i> Dashboard</a>
+      <a href="/upload" class="active"><i class="fas fa-upload fa-fw"></i> Upload Audio</a>
+      <a href="/announcement-type"><i class="fas fa-bullhorn fa-fw"></i> Announcement Type</a>
+      <a href="/sequence"><i class="fas fa-list-ol fa-fw"></i> Sequence</a>
+      <a href="/scheduler"><i class="fas fa-calendar-alt fa-fw"></i> Scheduler</a>
+      <a href="/zones"><i class="fas fa-map-marker-alt fa-fw"></i> Zones</a>
+      <a href="/users"><i class="fas fa-users fa-fw"></i> Users</a>
+      <a href="/permissions"><i class="fas fa-user-shield fa-fw"></i> Permissions</a>
+      <a href="/settings"><i class="fas fa-cog fa-fw"></i> Global Settings</a>
+      <a href="/tts-utility"><i class="fas fa-microphone-lines fa-fw"></i> TTS Utility</a>
+      <a href="/logs"><i class="fas fa-history fa-fw"></i> System Logs</a>
+    </div>
+
+    <div class="content">
+      <header>
+        <h1>Upload Audio Files</h1>
+        <button class="logout-btn" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+      </header>
+
+      <div class="language-tabs">
+        <p class="loading-text" id="languageTabsLoading">Loading languages...</p>
+      </div>
+
+      <section class="form-section">
+        <h2>New Audio Upload</h2>
+        <form id="upload-form">
+          <div class="form-group">
+            <label for="audioType">Audio Type:</label>
+            <select id="audioType" required>
+              <option value="specialmessage">Special Message</option>
+              <option value="std">Standard Phrase</option>
+              <option value="number">Number</option>
+              <option value="city">City</option>
+              <option value="airline">Airline</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="audioFile">Audio File (.mp3, .wav):</label>
+            <input type="file" id="audioFile" accept=".mp3,.wav" required>
+          </div>
+
+          <div class="form-group">
+            <label for="transcription">Transcription:</label>
+            <input type="text" id="transcription" placeholder="Enter transcribed text of the audio">
+          </div>
+
+          <div class="form-group">
+            <label for="remarks">Remarks (Optional):</label>
+            <input type="text" id="remarks" placeholder="Any notes or remarks about this audio">
+          </div>
+
+          <button type="submit" id="uploadButton"><i class="fas fa-cloud-upload-alt"></i> Upload Audio</button>
+          <p id="uploadStatus" style="margin-top: 10px; display: none;"></p>
+        </form>
+      </section>
+
+      <section class="table-section">
+        <h2>Uploaded Audio Library</h2>
+        <input type="text" id="searchBox" placeholder="Search audio by filename, type, transcription, or remarks...">
+
+        <div id="audioTableContainer">
+            <table id="audio-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Filename</th>
+                  <th>Type</th>
+                  <th>Transcription</th>
+                  <th>Remarks</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="audio-table-body">
+                <tr><td colspan="6" class="loading-text">Loading audio files...</td></tr>
+              </tbody>
+            </table>
+        </div>
+
+        <div class="pagination-controls" id="audioTablePagination" style="display: none;">
+          <button id="prevPageBtn"><i class="fas fa-chevron-left"></i> Prev</button>
+          <span id="pageInfo">Page 1 of 1</span>
+          <button id="nextPageBtn">Next <i class="fas fa-chevron-right"></i></button>
+        </div>
+      </section>
+    </div>
+  </div>
+  <script src="../js/base.js"></script>
+  <script src="../js/upload.js"></script>
+</body>
+</html>

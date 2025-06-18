@@ -1,0 +1,360 @@
+config/db.config.js - 
+import mysql from "mysql2/promise"; 
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const db = mysql.createPool({
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASSWORD || "Infosoft@123",
+  database: process.env.DB_NAME || "afas",
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+});
+
+export default db;
+
+
+
+controllers/announcementtype.controller.js - 
+import db from "../config/db.config.js";
+import axios from "axios";
+
+// ✅ Fetch languages dynamically
+export const getLanguages = async (req, res) => {
+  try {
+    console.log("📢 Fetching languages...");
+    const response = await axios.get("http://localhost:4003/languages");
+    res.json(response.data);
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching languages", error: err.message });
+  }
+};
+
+// ✅ Fetch announcement types for selected language & area
+export const getAnnouncementTypes = async (req, res) => {
+  const { language, area } = req.query;
+
+  if (!language || !area) {
+    return res.status(400).json({ message: "Language and Area are required." });
+  }
+
+  try {
+    console.log(`🔍 Fetching announcement types for Language: ${language}, Area: ${area}`);
+    const [types] = await db.execute(
+      "SELECT type FROM announcement_types WHERE language = ? AND area = ?",
+      [language, area]
+    );
+
+    res.json(types.map(row => row.type));
+  } catch (err) {
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+
+export const addAnnouncementType = async (req, res) => {
+  const { language, type, area } = req.body;
+
+  if (!language || !type || !area) {
+    return res.status(400).json({ message: "Language, Type, and Area are required." });
+  }
+
+  try {
+    console.log(`➕ Adding Announcement Type: ${type}, Language: ${language}, Area: ${area}`);
+
+    await db.execute(
+      "INSERT INTO announcement_types (language, type, area) VALUES (?, ?, ?)",
+      [language, type, area]
+    );
+
+    console.log("✅ Announcement Type added successfully!");
+    res.status(201).json({ message: "Announcement type added successfully." });
+  } catch (err) {
+    console.error("❌ Error adding announcement type:", err.message);
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+
+// ✅ Delete an announcement type for a selected language
+export const deleteAnnouncementType = async (req, res) => {
+  const { type } = req.params;
+  const { language } = req.query;
+
+  if (!language || !type) {
+    return res.status(400).json({ message: "Language and type are required." });
+  }
+
+  try {
+    console.log(`🗑 Deleting announcement type: ${type} for language: ${language}`);
+
+    await db.execute(
+      "DELETE FROM announcement_types WHERE language = ? AND type = ?",
+      [language, type]
+    );
+
+    console.log("✅ Announcement Type deleted successfully!");
+    res.status(204).send();
+  } catch (err) {
+    console.error("❌ Error deleting announcement type:", err.message);
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+
+
+controller/scriptmanager.controller.js - 
+import db from "../config/db.config.js";
+
+// ✅ Fetch transcription for a given sequence of audio files
+export const getTranscriptions = async (req, res) => {
+  const { sequence, language } = req.query;
+
+  if (!sequence || !language) {
+    return res.status(400).json({ message: "Sequence and Language parameters are required." });
+  }
+
+  const sequenceArray = sequence.split(",").map(s => s.trim());
+  const transcriptions = [];
+
+  for (const audio of sequenceArray) {
+    if (audio.startsWith("*") && audio.endsWith("*")) {
+      transcriptions.push(audio);
+    } else {
+      try {
+        const [result] = await db.execute(
+          `SELECT transcription FROM audios 
+           WHERE LOWER(REPLACE(filePath, '\\\\', '/')) LIKE LOWER(?) 
+           AND LOWER(language) = LOWER(?)`,
+          [`%/${audio}.wav`, language]
+        );
+
+        if (result.length > 0) {
+          transcriptions.push(result[0].transcription || "N/A");
+        } else {
+          transcriptions.push("N/A");
+        }
+      } catch (err) {
+        console.error(`❌ Error fetching transcription for ${audio}:`, err.message);
+        transcriptions.push("N/A");
+      }
+    }
+  }
+
+  res.json({ transcriptions });
+};
+
+// ✅ Add a new script
+export const addScript = async (req, res) => {
+  const { language, announcementType, sequence, transcription, area } = req.body;
+
+  if (!language || !announcementType || !sequence || !area) {
+    return res.status(400).json({ message: "All fields are required." });
+  }
+
+  try {
+    const sequenceArray = sequence
+      .split(",")
+      .map(s => s.trim())
+      .filter(s => s !== "");
+
+    const sequenceJSON = JSON.stringify(sequenceArray);
+
+    await db.execute(
+      "INSERT INTO scripts (language, announcement_type, sequence, transcription, area) VALUES (?, ?, ?, ?, ?)",
+      [language, announcementType, sequenceJSON, transcription, area]
+    );
+
+    res.status(201).json({ message: "Script added successfully." });
+  } catch (err) {
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+// ✅ Update script
+export const updateScript = async (req, res) => {
+  const { id } = req.params;
+  const { announcementType, language, sequence, transcription, area } = req.body;
+
+  try {
+    const sequenceArray = sequence
+      .split(",")
+      .map(s => s.trim())
+      .filter(s => s !== "");
+
+    const sequenceJSON = JSON.stringify(sequenceArray);
+
+    await db.execute(
+      "UPDATE scripts SET announcement_type = ?, language = ?, sequence = ?, transcription = ?, area = ? WHERE id = ?",
+      [announcementType, language, sequenceJSON, transcription, area, id]
+    );
+
+    res.status(200).json({ message: "Script updated successfully." });
+  } catch (err) {
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+// ✅ Get script by ID
+export const getScriptById = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const [script] = await db.execute("SELECT * FROM scripts WHERE id = ?", [id]);
+
+    if (script.length === 0) {
+      return res.status(404).json({ message: "Script not found" });
+    }
+
+    res.json(script[0]);
+  } catch (err) {
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+// ✅ Fetch scripts
+export const getScripts = async (req, res) => {
+  const { language, area } = req.query;
+  if (!language || !area) {
+    return res.status(400).json({ message: "Language and Area are required." });
+  }
+
+  try {
+    const [scripts] = await db.execute(
+      "SELECT id, language, announcement_type, sequence, transcription, area FROM scripts WHERE language = ? AND area = ?",
+      [language, area]
+    );
+
+    res.json(scripts);
+  } catch (err) {
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+// ✅ Delete
+export const deleteScript = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    await db.execute("DELETE FROM scripts WHERE id = ?", [id]);
+    res.status(204).send();
+  } catch (err) {
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+// ✅ Get languages for UI
+export const getLanguages = async (req, res) => {
+  try {
+    const [languages] = await db.execute("SELECT DISTINCT language FROM announcement_types");
+    res.json(languages.map(row => row.language));
+  } catch (err) {
+    console.error("Error fetching languages:", err.message);
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+
+
+
+
+
+routes/announcementtype.routes.js - 
+import express from "express";
+import { 
+  getLanguages, 
+  getAnnouncementTypes, 
+  addAnnouncementType, 
+  deleteAnnouncementType 
+} from "../controllers/announcementtype.controller.js";
+
+const router = express.Router();
+
+// ✅ Serve the Announcement Type Page
+router.get("/", (req, res) => {
+  res.sendFile("public/announcementtype.html", { root: process.cwd() });
+});
+
+// ✅ Fetch languages from Upload Service (Now at `/languages`)
+router.get("/languages", getLanguages);
+
+// ✅ Fetch announcement types for a selected language
+router.get("/types", getAnnouncementTypes);
+
+// ✅ Add new announcement type
+router.post("/types", addAnnouncementType);
+
+// ✅ Delete announcement type (now requires language as a query param)
+router.delete("/types/:type", deleteAnnouncementType);
+
+export default router;
+
+
+
+routes/scriptmanager.route.js - 
+import express from "express";
+import { 
+  getTranscriptions, 
+  addScript, 
+  getScripts, 
+  deleteScript, 
+  updateScript, 
+  getScriptById // ✅ Add this function
+} from "../controllers/scriptmanager.controller.js";
+
+const router = express.Router();
+
+router.get("/transcriptions", getTranscriptions);
+router.post("/scripts", addScript);
+router.get("/scripts", getScripts);
+router.get("/scripts/:id", getScriptById); // ✅ Add route to fetch script by ID
+router.put("/scripts/:id", updateScript);
+router.delete("/scripts/:id", deleteScript);
+
+export default router;
+
+
+.env-
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=Infosoft@123
+DB_NAME=afas
+
+
+
+app.js - 
+import express from "express";
+import dotenv from "dotenv";
+import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
+import announcementTypeRoutes from "./routes/announcementtype.routes.js";
+import scriptManagerRoutes from "./routes/scriptmanager.routes.js";
+
+dotenv.config();
+const app = express();
+const PORT = process.env.PORT || 4006;
+
+// Support for __dirname in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// ✅ Enable CORS (required to serve APIs to frontend-service)
+app.use(cors({ origin: "*", methods: ["GET", "POST", "PUT", "DELETE"] }));
+
+// Middleware
+app.use(express.json());
+
+// API Routes only — no frontend serving now
+app.use("/announcementtype", announcementTypeRoutes);
+app.use("/scriptmanager", scriptManagerRoutes);
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`✅ Script Manager Service running on http://localhost:${PORT}`);
+});
+
+

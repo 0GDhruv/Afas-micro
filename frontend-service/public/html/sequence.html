@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sequence Manager | AFAS</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+  <div class="wrapper">
+    <div class="sidebar">
+      <h2>AFAS</h2>
+      <a href="/dashboard"><i class="fas fa-tachometer-alt fa-fw"></i> Dashboard</a>
+      <a href="/upload"><i class="fas fa-upload fa-fw"></i> Upload Audio</a>
+      <a href="/announcement-type"><i class="fas fa-bullhorn fa-fw"></i> Announcement Type</a>
+      <a href="/sequence" class="active"><i class="fas fa-list-ol fa-fw"></i> Sequence</a>
+      <a href="/scheduler"><i class="fas fa-calendar-alt fa-fw"></i> Scheduler</a>
+      <a href="/zones"><i class="fas fa-map-marker-alt fa-fw"></i> Zones</a>
+      <a href="/users"><i class="fas fa-users fa-fw"></i> Users</a>
+      <a href="/permissions"><i class="fas fa-user-shield fa-fw"></i> Permissions</a>
+      <a href="/settings"><i class="fas fa-cog fa-fw"></i> Global Settings</a>
+      <a href="/tts-utility"><i class="fas fa-microphone-lines fa-fw"></i> TTS Utility</a>
+      <a href="/logs"><i class="fas fa-history fa-fw"></i> System Logs</a>
+    </div>
+
+    <main class="content">
+      <header>
+        <h1>Manage Script Sequences</h1>
+        <button class="logout-btn" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+      </header>
+
+      <section class="form-section">
+        <h2>Create/Edit Script Sequence</h2>
+        <form id="scriptmanager-form">
+          <input type="hidden" id="script-id"> <div class="form-group">
+                <label for="areaSequenceSelect">Select Area:</label>
+                <select id="areaSequenceSelect"> <option value="Arrival">Arrival</option>
+                  <option value="Departure">Departure</option>
+                  <option value="Common">Common</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Select Language:</label>
+                <div class="language-tabs" id="sequenceLanguageTabs">
+                  <p class="loading-text">Loading languages...</p>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="announcementTypeSelect">Announcement Type:</label>
+                <select id="announcementTypeSelect" required>
+                  <option value="">-- Select Type --</option>
+                  </select>
+            </div>
+            <div class="form-group">
+                <label for="sequenceInput">Sequence (comma-separated audio filenames or *placeholders*):</label>
+                <input type="text" id="sequenceInput" required placeholder="e.g., STD1, *IATAAIR*, *IATAFLIGHTNO*, STD2, *DESTCITY*, STD3, *GATENO*">
+                <small>Example placeholders: *IATAAIR*, *IATAFLIGHTNO*, *DESTCITY*, *GATENO*, *STD*, *ETD*</small>
+            </div>
+            <div class="form-group">
+                <label for="transcriptionOutput">Generated Transcription (Preview):</label>
+                <textarea id="transcriptionOutput" rows="3" readonly placeholder="Transcription will appear here..."></textarea>
+                <button type="button" id="getTranscriptionBtn" style="margin-top: 5px; width: auto; padding: 6px 10px; font-size: 0.9em;"><i class="fas fa-comment-dots"></i> Get Transcription</button>
+            </div>
+          <button type="submit" id="addScriptBtn"><i class="fas fa-plus-circle"></i> Add Sequence</button>
+        </form>
+      </section>
+
+      <section class="table-section">
+        <h2>Existing Script Sequences</h2>
+        <p style="margin-bottom: 15px; font-style: italic; color: #bbb;">Sequences are shown for the selected Area and Language above.</p>
+        <div id="scriptsTableContainer">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Announcement Type</th>
+                  <th>Sequence</th>
+                  <th>Transcription</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="scriptsTableBody">
+                <tr><td colspan="5" class="loading-text">Select an area and language to view sequences.</td></tr>
+              </tbody>
+            </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="../js/base.js"></script>
+  <script src="../js/sequence.js"></script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>{{title}}</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div class="app-wrapper">
+    <!-- Sidebar -->
+    <nav class="side-nav">
+      <h1>AFAS</h1>
+      <a href="/dashboard" class="{{#ifActive 'dashboard'}}active{{/ifActive}}">Dashboard</a>
+      <a href="/audio-type" class="{{#ifActive 'audio-type'}}active{{/ifActive}}">Audio Type</a>
+      <a href="/upload" class="{{#ifActive 'upload'}}active{{/ifActive}}">Upload Audio</a>
+      <a href="/announcement-type" class="{{#ifActive 'announcement-type'}}active{{/ifActive}}">Announcement Type</a>
+      <a href="/sequence" class="{{#ifActive 'sequence'}}active{{/ifActive}}">Sequence</a>
+      <a href="/scheduler" class="{{#ifActive 'scheduler'}}active{{/ifActive}}">Scheduler</a>
+      <a href="/zones" class="{{#ifActive 'zones'}}active{{/ifActive}}">Zones</a>
+      <a href="/settings" class="{{#ifActive 'settings'}}active{{/ifActive}}">Settings</a>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="main-container">
+      <header class="top-bar">
+        <div>Welcome to AFAS</div>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+      </header>
+
+      <main class="main-content">
+        {{{body}}}
+      </main>
+    </div>
+  </div>
+
+  <script src="/js/base.js"></script>
+  {{#if pageScript}}
+    <script src="/js/{{pageScript}}"></script>
+  {{/if}}
+</body>
+</html>

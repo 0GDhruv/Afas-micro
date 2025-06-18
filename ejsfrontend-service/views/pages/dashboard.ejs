@@ -1,0 +1,36 @@
+<h2>Active Announcements</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Announcement</th>
+      <th>Status</th>
+      <th>Flight</th>
+      <th>Airline</th>
+      <th>City</th>
+      <th>Gate</th>
+      <th>Time</th>
+      <th>Seq</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% if (announcements.length > 0) { %>
+      <% announcements.forEach((a, i) => { %>
+        <tr>
+          <td><%= i + 1 %></td>
+          <td><%= a.announcement_name %></td>
+          <td><%= a.status %></td>
+          <td><%= a.flight_code %></td>
+          <td><%= a.airline_name %></td>
+          <td><%= a.city_name %></td>
+          <td><%= a.gate_number %></td>
+          <td><%= a.time %></td>
+          <td><%= a.sequence %></td>
+        </tr>
+      <% }) %>
+    <% } else { %>
+      <tr><td colspan="9">No active announcements found.</td></tr>
+    <% } %>
+  </tbody>
+</table>

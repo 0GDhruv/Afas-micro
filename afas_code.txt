@@ -1,0 +1,4214 @@
+audio-processing-service
+db.config.js :-
+import mysql from "mysql2/promise";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const afasDb = mysql.createPool({
+    host: process.env.DB_HOST || "localhost",
+    user: process.env.DB_USER || "afas_user",
+    password: process.env.DB_PASSWORD || "Infosoft@123",
+    database: process.env.DB_NAME || "afas",
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+});
+
+export default afasDb;
+
+upload-service.config.js :-
+import axios from "axios";
+import path from "path";
+import fs from "fs";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const UPLOAD_SERVICE_URL = process.env.UPLOAD_SERVICE_URL || "http://localhost:4003";
+
+export const fetchAudioFile = async (category, filename, language = "english") => {
+  try {
+    const url = `${UPLOAD_SERVICE_URL}/audio-file`;
+    const response = await axios.get(url, {
+      params: { category, filename, language },
+      responseType: "arraybuffer",
+    });
+
+    if (response.status === 200) {
+      const tempDir = path.resolve("output_audio/tmp"); // ✅ Writable local folder
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+
+      const filePath = path.join(tempDir, `${Date.now()}-${filename}`);
+      const fsPromises = await import("fs/promises");
+      await fsPromises.writeFile(filePath, Buffer.from(response.data));
+      return filePath;
+    } else {
+      console.warn(`❌ Audio not found: ${category}/${filename}`);
+      return null;
+    }
+  } catch (err) {
+    console.error(`❌ Error fetching audio file (${category}/${filename}):`, err.message);
+    return null;
+  }
+};
+
+audioProcessing.controller.js :-
+import { getAnnouncementSequence, getFlightDetails, getAudioFiles } from "../services/audioFetch.service.js";
+import { mergeAudioFiles } from "../services/audioMerge.service.js";
+import afasDb from "../config/db.config.js";
+import fs from "fs";
+import path from "path";
+
+const OUTPUT_DIR = "output_audio/";
+
+const cleanOldFiles = () => {
+  const now = Date.now();
+  fs.readdirSync(OUTPUT_DIR).forEach(file => {
+    const full = path.join(OUTPUT_DIR, file);
+    if (fs.statSync(full).mtimeMs < now - 30 * 60 * 1000) {
+      fs.unlinkSync(full);
+      console.log("🧹 Deleted:", file);
+    }
+  });
+};
+
+// ✅ Generate announcement audio for a flight
+export const processAnnouncement = async (req, res) => {
+  const { flight_number } = req.params;
+
+  try {
+    const details = await getFlightDetails(flight_number);
+    if (!details) return res.status(404).json({ message: "Flight not found." });
+
+    const sequence = await getAnnouncementSequence(details.announcement_type);
+    if (!sequence) return res.status(404).json({ message: "No sequence found." });
+
+    const language = "english"; // default
+    const audioClips = await getAudioFiles(sequence, details, language);
+    const time = (details.std || details.etd || "00:00:00").replace(/:/g, "-");
+    const outputFile = `${flight_number}_${language}_${time}.wav`;
+
+    const finalAudio = await mergeAudioFiles(audioClips, outputFile);
+    cleanOldFiles();
+
+    res.json({ message: "Ready", audio_path: finalAudio });
+  } catch (err) {
+    console.error("❌ Error in processAnnouncement:", err.message);
+    res.status(500).json({ message: "Failed to process announcement", error: err.message });
+  }
+};
+
+// ✅ API to mark flight as announced after final repeat
+export const markFlightAsAnnounced = async (req, res) => {
+  const { flight_number } = req.body;
+  if (!flight_number) return res.status(400).json({ message: "Missing flight number" });
+
+  try {
+    await afasDb.execute(
+      "UPDATE active_playlist SET announcement_status = 'Completed' WHERE flight_number = ?",
+      [flight_number]
+    );
+    res.status(200).json({ message: "Marked as announced" });
+  } catch (err) {
+    console.error("❌ Error marking flight announced:", err.message);
+    res.status(500).json({ message: "Error marking announcement", error: err.message });
+  }
+};
+
+// ✅ Get flights where announcement is still pending
+export const getActiveAnnouncements = async (req, res) => {
+  try {
+    const [rows] = await afasDb.execute(
+      "SELECT flight_number, std, etd, announcement_count FROM active_playlist WHERE announcement_status = 'Pending'"
+    );
+
+    const result = rows.map(row => {
+      const time = (row.std || row.etd || "00:00:00").replace(/:/g, "-");
+      return {
+        flight_number: row.flight_number,
+        audio_path: `${row.flight_number}_english_${time}.wav`,
+        language: "english",
+        announcement_count: row.announcement_count || 0,
+      };
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error("❌ Error fetching active announcements:", err.message);
+    res.status(500).json({ message: "Failed to get active announcements", error: err.message });
+  }
+};
+
+
+
+audioProcessing.routes.js :-
+import express from "express";
+import { processAnnouncement, markFlightAsAnnounced, getActiveAnnouncements } from "../controllers/audioProcessing.controller.js";
+
+const router = express.Router();
+
+router.get("/generate/:flight_number", processAnnouncement);
+router.post("/mark-announced", markFlightAsAnnounced);
+router.get("/active", getActiveAnnouncements);
+
+export default router;
+
+
+
+audioFetch.service.js :-
+import afasDb from "../config/db.config.js";
+import { fetchAudioFile } from "../config/upload-service.config.js";
+
+// ✅ Fetch sequence from scripts
+export const getAnnouncementSequence = async (announcementType) => {
+  try {
+    const [rows] = await afasDb.execute(
+      "SELECT sequence FROM scripts WHERE announcement_type = ? LIMIT 1",
+      [announcementType]
+    );
+
+    if (rows.length === 0) return null;
+
+    return typeof rows[0].sequence === "string"
+      ? JSON.parse(rows[0].sequence)
+      : rows[0].sequence;
+  } catch (error) {
+    console.error("❌ Error fetching sequence:", error.message);
+    return null;
+  }
+};
+
+// ✅ Fetch flight row
+export const getFlightDetails = async (flightNumber) => {
+  try {
+    const [rows] = await afasDb.execute(
+      "SELECT * FROM active_playlist WHERE flight_number = ? LIMIT 1",
+      [flightNumber]
+    );
+    return rows.length > 0 ? rows[0] : null;
+  } catch (error) {
+    console.error("❌ Error fetching flight details:", error.message);
+    return null;
+  }
+};
+
+// ✅ Build the audio clips from placeholders and static entries
+export const getAudioFiles = async (sequence, flightDetails, language = "english") => {
+  const audioClips = [];
+
+  for (const item of sequence) {
+    let audioClip = null;
+
+    if (item.startsWith("*") && item.endsWith("*")) {
+      const variable = item.replace(/\*/g, "");
+      const value = getMappedValue(variable, flightDetails);
+
+      if (!value) {
+        console.warn(`⚠ Missing value for variable: ${variable}`);
+        continue;
+      }
+
+      if (variable === "IATAFLIGHTNO") {
+        for (let digit of value) {
+          const clip = await fetchAudioFile("numbers", `${digit}.wav`, language);
+          if (clip) audioClips.push(clip);
+        }
+        continue;
+      }
+
+      if (["ETD", "STD"].includes(variable)) {
+        const [hh, mm] = value.split(":");
+        const timeClips = [
+          await fetchAudioFile("numbers", `${hh}.wav`, language),
+          await fetchAudioFile("std", "hours.wav", language),
+          await fetchAudioFile("numbers", `${mm}.wav`, language),
+          await fetchAudioFile("std", "minutes.wav", language),
+        ];
+        audioClips.push(...timeClips.filter(Boolean));
+        continue;
+      }
+
+      const category = getCategory(variable);
+      const formatted = formatValue(value);
+      audioClip = await fetchAudioFile(category, `${formatted}.wav`, language);
+    } else {
+      // Static STD4, STD10, etc.
+      audioClip = await fetchAudioFile("std", item + ".wav", language);
+    }
+
+    if (audioClip) audioClips.push(audioClip);
+  }
+
+  return audioClips;
+};
+
+// ✅ Category logic
+const getCategory = (variable) => {
+  const categoryMap = {
+    IATAAIR: "airline",
+    DESTCITY: "cities",
+    GATENO: "gate",
+    ROWS: "rows",
+    ZONENO: "zones",
+    ZONELETTER: "zones",
+    ETD: "numbers",
+    STD: "numbers",
+  };
+  return categoryMap[variable] || "std";
+};
+
+// ✅ Format e.g. "Air India" → "air_india"
+const formatValue = (value) =>
+  String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_]/gi, "");
+
+// ✅ Dynamic variable to actual value mapping
+const getMappedValue = (variable, flightDetails) => {
+  const map = {
+    IATAAIR: flightDetails.airline_name,
+    DESTCITY: flightDetails.city_name,
+    IATAFLIGHTNO: flightDetails.flight_number,
+    ETD: flightDetails.etd || flightDetails.std,
+    STD: flightDetails.std || flightDetails.etd,
+    GATENO: flightDetails.gate_number,
+  };
+  return map[variable] || flightDetails[variable];
+};
+
+audioMerge.service.js :-
+import { exec } from "child_process";
+import fs from "fs";
+import path from "path";
+
+const OUTPUT_DIR = "output_audio/";
+
+export const mergeAudioFiles = async (audioPaths, outputFileName) => {
+  if (!audioPaths.length) {
+    console.error("❌ No audio files to merge.");
+    return null;
+  }
+
+  if (!fs.existsSync(OUTPUT_DIR)) {
+    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  }
+
+  const listFilePath = path.join(OUTPUT_DIR, `concat_list_${Date.now()}.txt`);
+  const listContent = audioPaths.map(file => `file '${path.resolve(file)}'`).join("\n");
+  fs.writeFileSync(listFilePath, listContent);
+
+  const finalName = outputFileName || `${Date.now()}.wav`;
+  const outputPath = path.join(OUTPUT_DIR, finalName);
+
+  const cmd = `ffmpeg -y -f concat -safe 0 -i "${listFilePath}" -c copy "${outputPath}"`;
+
+  return new Promise((resolve, reject) => {
+    exec(cmd, (err, stdout, stderr) => {
+      fs.unlinkSync(listFilePath);
+      if (err) {
+        console.error("❌ Merge error:", stderr || err.message);
+        return reject(null);
+      }
+      console.log(`✅ Merged Audio: ${outputPath}`);
+      resolve(finalName);
+    });
+  });
+};
+
+.env :-
+# Database Config
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=Infosoft@123
+DB_NAME=afas
+
+# Upload Service API
+UPLOAD_SERVICE_URL=http://localhost:4003
+
+
+
+
+app.js :-
+import express from "express";
+import dotenv from "dotenv";
+import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
+import audioRoutes from "./routes/audioProcessing.routes.js";
+import "./flightAnnouncer.worker.js";
+
+// Load environment variables
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 4008;
+
+// Define __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Serve merged audio files from output directory
+app.use(express.static(path.join(__dirname, "output_audio")));
+
+// API Routes for audio generation
+app.use("/audio", audioRoutes);
+
+// ✅ Do NOT include `/audio-file` route here anymore
+
+// Start the server
+app.listen(PORT, () => {
+  console.log(`✅ Audio Processing Service running on http://localhost:${PORT}`);
+});
+
+
+
+
+flightAnnouncer.worker.js-
+import afasDb from "./config/db.config.js";
+import { getAnnouncementSequence, getAudioFiles } from "./services/audioFetch.service.js";
+import { mergeAudioFiles } from "./services/audioMerge.service.js";
+import axios from "axios";
+import path from "path";
+import fs from "fs";
+
+const OUTPUT_DIR = "output_audio/";
+
+const getSettings = async () => {
+  try {
+    const { data } = await axios.get("http://localhost:4010/settings");
+    console.log("✅ Settings received:", data);
+    return data;
+  } catch (err) {
+    console.error("❌ Failed to fetch settings:", err.message);
+    return null;
+  }
+};
+
+const checkAndAnnounceFlights = async () => {
+  try {
+    console.log("🔍 Checking for flights with announcement_status = 'Pending'...");
+
+    const settings = await getSettings();
+    if (!settings) {
+      console.warn("⚠️ Skipping announcement due to missing settings");
+      return;
+    }
+
+    const advanceMinutes = parseInt(settings.advance_minutes || 15);
+    const now = new Date();
+    const nowPlusAdvance = new Date(now.getTime() + advanceMinutes * 60000);
+
+    const [rows] = await afasDb.execute(`
+      SELECT * FROM active_playlist 
+      WHERE announcement_status = 'Pending'
+        AND announcement_type IS NOT NULL
+    `);
+
+    console.log(`📋 Found ${rows.length} flight(s) marked 'Pending' for announcement`);
+
+    for (const row of rows) {
+      const timeStr = row.std || row.etd;
+      if (!timeStr) {
+        console.warn(`⚠️ Skipping flight ${row.flight_number} due to missing STD/ETD`);
+        continue;
+      }
+
+      const [hh, mm] = timeStr.split(":");
+      const flightTime = new Date(now);
+      flightTime.setHours(parseInt(hh), parseInt(mm), 0, 0);
+
+      if (flightTime > nowPlusAdvance) {
+        console.log(`⏩ Skipping flight ${row.flight_number} — not within advance window`);
+        continue;
+      }
+
+      console.log(`🎙 Preparing announcement for flight ${row.flight_number}...`);
+
+      for (const lang of settings.language_order) {
+        if (!settings.languages?.[lang]) {
+          console.log(`🚫 Skipping language ${lang} (disabled in settings)`);
+          continue;
+        }
+
+        const timeFormatted = timeStr.replace(/:/g, "-");
+        const filename = `${row.flight_number}_${lang}_${timeFormatted}.wav`;
+        const outputPath = path.join(OUTPUT_DIR, filename);
+
+        if (fs.existsSync(outputPath)) {
+          console.log(`⏩ Audio already exists: ${filename}, skipping generation.`);
+        } else {
+          const sequence = await getAnnouncementSequence(row.announcement_type);
+          if (!sequence) {
+            console.warn(`⚠️ No sequence found for type '${row.announcement_type}'`);
+            continue;
+          }
+
+          const clips = await getAudioFiles(sequence, row, lang);
+          if (!clips.length) {
+            console.warn(`⚠️ No audio clips found for flight ${row.flight_number} (${lang})`);
+            continue;
+          }
+
+          const merged = await mergeAudioFiles(clips, filename);
+          if (!merged) {
+            console.warn(`⚠️ Failed to merge clips for ${row.flight_number} (${lang})`);
+            continue;
+          }
+
+          console.log(`✅ Merged audio file: ${filename}`);
+        }
+
+        console.log(`📤 Sending audio to scheduler for playback (${lang})`);
+        try {
+          await axios.post("http://localhost:4004/scheduler/announce", {
+            flight_number: row.flight_number,
+            audio_path: filename,
+            language: lang,
+          });
+        } catch (postErr) {
+          console.error("❌ Failed to POST to scheduler:", postErr?.response?.data || postErr.message);
+        }
+      }
+
+      console.log(`⏸ Flight ${row.flight_number} remains in 'Pending' status for scheduler to repeat`);
+    }
+
+    console.log("✅ All announcements processed this cycle.\n");
+  } catch (err) {
+    console.error("❌ Flight announcer error:", err?.message || err);
+  }
+};
+
+setInterval(checkAndAnnounceFlights, 30000);
+console.log("🚀 Flight Announcer Started...");
+
+
+
+fids-integration-service-
+afas.db.config - 
+import mysql from "mysql2/promise";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const afasDb = mysql.createPool({
+    host: process.env.AFS_DB_HOST || "localhost",  // ✅ AFAS Database
+    user: process.env.AFS_DB_USER || "afas_user",
+    password: process.env.AFS_DB_PASS || "Infosoft@123",
+    database: process.env.AFS_DB_NAME || "afas",
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+});
+
+export default afasDb;
+
+fids.db.config - 
+
+import mysql from "mysql2/promise";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const fidsDb = mysql.createPool({
+    host: process.env.FIDS_DB_HOST || "192.168.10.230",// ✅ FIDS Server (Ubuntu)
+    user: process.env.FIDS_DB_USER || "afas_user",
+    password: process.env.FIDS_DB_PASS || "Infosoft@123",
+    database: process.env.FIDS_DB_NAME || "fids",
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+});
+
+export default fidsDb;
+
+
+
+
+fids.controller.js- 
+
+import fidsDb from "../config/fids_db.config.js"; // FIDS Database
+import afasDb from "../config/afas_db.config.js"; // AFAS Database
+import { getAnnouncementSequence } from "../services/announcement.service.js";
+
+// ✅ Polling function for checking FIDS updates
+export const pollFIDSData = async () => {
+  try {
+    console.log("🔄 Polling FIDS database for flight updates...");
+
+    // ✅ Fetch all distinct flight statuses from FIDS (AFT Table)
+    const [rows] = await fidsDb.execute(
+      `SELECT DISTINCT t1.*, t2.CityName, t3.AirlineName 
+       FROM aft AS t1
+       JOIN citymaster AS t2 ON t1.CityIATACode = t2.IATACityCode
+       JOIN airlinemaster AS t3 ON t1.IATAAirlineCode = t3.IATAAirlineCode`
+    );
+
+    if (rows.length === 0) {
+      console.log("✅ No new announcements needed.");
+      return;
+    }
+
+    // ✅ Fetch all announcement types from AFAS (Fixing the DB issue)
+    const [announcementTypes] = await afasDb.execute(
+      `SELECT type, area FROM announcement_types`
+    );
+
+    // ✅ Convert announcement types into a lookup object
+    const announcementMap = {};
+    announcementTypes.forEach(({ type, area }) => {
+      announcementMap[type] = area;
+    });
+
+    for (const flight of rows) {
+      console.log(`✈ Processing Flight: ${flight.FlightCode}, Status: ${flight.Status}, ArrDepFlag: ${flight.ArrDepFlag}, Gate: ${flight.GateBelt}`);
+
+      // ✅ Determine area type (Arrival or Departure) using ArrDepFlag
+      const area = flight.ArrDepFlag === 1 ? "Arrival" : "Departure";
+      console.log("DHRUV PLEASE CHECK AREA Before mapping i.e :",area);
+      
+      console.log(`🚨 Before mapping: Flight ${flight.FlightCode}, Status: ${flight.Status}, ArrDepFlag: ${flight.ArrDepFlag}`);
+
+
+      // ✅ Determine correct announcement type based on status & area
+      const announcementType = mapFlightStatusToAnnouncement(flight.Status, flight.ArrDepFlag, announcementMap);
+      if (!announcementType) {
+        console.log(`⚠ No announcement mapping found for status: ${flight.Status}`);
+        continue;
+      }
+      console.log(`🔍 Checking for announcement: Type: ${announcementType}, Area: ${area}`);
+
+      // ✅ Fetch predefined announcement sequence from Script Manager
+      const sequence = await getAnnouncementSequence(announcementType, area);
+      if (!sequence) {
+        console.log(`⚠ No sequence found for announcement type: ${announcementType} in area: ${area}`);
+        continue;
+      }
+
+      // ✅ Convert FlightDate to MySQL DATE format
+      const flightDateIST = new Date((flight.FlightDate + 19800) * 1000); // ✅ Convert Unix timestamp to IST (UTC+5:30)
+const flightDate = flightDateIST.toISOString().split("T")[0]; // ✅ Extract YYYY-MM-DD
+
+
+
+
+      // ✅ Check if flight already exists in playlist (Now checking arr_dep_flag)
+      const [existing] = await afasDb.execute(
+        `SELECT id, status, flight_date, row_update_date FROM playlist 
+         WHERE flight_code = ? AND arr_dep_flag = ? LIMIT 1`,
+        [flight.FlightCode, flight.ArrDepFlag] // 🔹 Ensures correct Arrival vs Departure lookup
+      );
+
+      const newStatus = mapPlaylistStatus(flight.Status);
+      const playlistEntry = {
+        flight_code: flight.FlightCode,
+        flight_number: flight.FlightNumber,
+        gate_number: flight.GateBelt || null,
+        announcement_type: announcementType,
+        sequence,
+        status: newStatus,
+        created_at: new Date().toISOString(),
+        city_name: flight.CityName,
+        airline_name: flight.AirlineName,
+        language: "english",
+        flight_date: flightDate,
+        row_update_date: flight.RowUpdateDate,
+        arr_dep_flag: flight.ArrDepFlag,
+        std: flight.STASTD || null,
+        etd: flight.ETAETD || null
+      };
+
+      if (existing.length > 0) {
+        if (existing[0].row_update_date < flight.RowUpdateDate) {
+          console.log(`🔄 Updating playlist entry for Flight ${flight.FlightCode} with status: ${newStatus}`);
+          await afasDb.execute(
+            `UPDATE playlist SET 
+              gate_number = ?, 
+              announcement_type = ?, 
+              sequence = ?, 
+              status = ?, 
+              city_name = ?, 
+              airline_name = ?, 
+              flight_date = ?,
+              row_update_date = ?,
+              arr_dep_flag = ?,
+              std = ?,
+              etd = ?
+            WHERE flight_code = ? AND arr_dep_flag = ?`,
+            [
+              playlistEntry.gate_number,
+              playlistEntry.announcement_type,
+              JSON.stringify(playlistEntry.sequence),
+              playlistEntry.status,
+              playlistEntry.city_name,
+              playlistEntry.airline_name,
+              playlistEntry.flight_date,
+              playlistEntry.row_update_date,
+              playlistEntry.arr_dep_flag,
+              playlistEntry.std,
+              playlistEntry.etd,
+              playlistEntry.flight_code,
+              playlistEntry.arr_dep_flag
+            ]
+          );
+        }
+      } else {
+        console.log(`📢 Adding new announcement for Flight ${flight.FlightCode} with status: ${newStatus}`);
+        await afasDb.execute(
+          `INSERT INTO playlist (flight_code, flight_number, gate_number, announcement_type, sequence, status, city_name, airline_name, flight_date, row_update_date, arr_dep_flag, std, etd) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+
+          [
+            playlistEntry.flight_code,
+            playlistEntry.flight_number,
+            playlistEntry.gate_number,
+            playlistEntry.announcement_type,
+            JSON.stringify(playlistEntry.sequence),
+            playlistEntry.status,
+            playlistEntry.city_name,
+            playlistEntry.airline_name,
+            playlistEntry.flight_date,
+            playlistEntry.row_update_date,
+            playlistEntry.arr_dep_flag,
+            playlistEntry.std,
+            playlistEntry.etd
+          ]
+        );
+      }
+    }
+  } catch (error) {
+    console.error("❌ Error polling FIDS data:", error.message);
+  }
+};
+
+// ✅ Map flight statuses to predefined announcement types
+// ✅ Map flight statuses to predefined announcement types
+const mapFlightStatusToAnnouncement = (status, arrDepFlag, announcementMap) => {
+  let area = arrDepFlag === 1 ? "Arrival" : "Departure"; // Ensure correct area
+  const lowerStatus = status.trim().toLowerCase(); // Normalize status case
+
+  console.log(`🛠 Checking mapping for status: '${status}' (normalized: '${lowerStatus}') in area: '${area}' (ArrDepFlag=${arrDepFlag})`);
+
+  // 🔥 **Fix: Ensure "Arrived" is always treated as "Arrival"**
+  if (lowerStatus === "arrived") {
+    console.log(`🚨 Overriding area for 'Arrived' flights -> Setting area to 'Arrival'`);
+    area = "Arrival";  // ✅ Ensure arrived flights always get assigned to "Arrival"
+  }
+
+  const statusMap = {
+    "scheduled": { "Arrival": "Scheduled", "Departure": "Scheduled" },
+    "arrived": { "Arrival": "Arrived" },
+    "departed": { "Departure": "Departed" },
+    "diverted": { "Arrival": "Diverted", "Departure": "Diverted" },
+    "boarding": { "Departure": "Boarding" },
+    "check in": { "Departure": "Check IN" },
+    "final boarding": { "Departure": "Final Boarding Call" },
+    "cancelled": { "Arrival": "Cancelled", "Departure": "Cancelled" },
+    "rescheduled": { "Arrival": "Rescheduled", "Departure": "Rescheduled" },
+    "gate closed": { "Departure": "Gate Closed" },
+    "on time": { "Arrival": "On Time", "Departure": "On Time" },
+    "delayed": { "Arrival": "Delayed", "Departure": "Delayed" }
+  };
+
+  const mappedType = statusMap[lowerStatus]?.[area];
+
+  console.log(`🔹 Status Map Lookup: '${lowerStatus}' in area '${area}' => '${mappedType}'`);
+
+  if (!mappedType) {
+    console.log(`❌ No valid mapping found for status: '${status}'`);
+    return null;
+  }
+
+  if (!announcementMap[mappedType]) {
+    console.log(`❌ Announcement type '${mappedType}' does not exist in database!`);
+    return null;
+  }
+
+  console.log(`✅ Final Mapping: Status '${status}' -> Announcement Type '${mappedType}' in '${area}'`);
+  return mappedType;
+};
+
+
+
+
+
+// ✅ Map playlist status correctly
+const mapPlaylistStatus = (fidsStatus) => {
+  const statusMap = {
+    "Scheduled": "Scheduled",
+    "Arrived": "Arrived",
+    "Departed": "Completed",
+    "Diverted": "Diverted",
+    "Boarding": "Boarding",
+    "Check IN": "In Progress",
+    "Final Boarding": "In Progress",
+    "Cancelled": "Cancelled",
+    "Rescheduled": "Scheduled",
+    "Gate Closed": "Closed",
+    "On Time": "Scheduled",
+    "Postponed": "Postponed",
+    "Preponed": "Scheduled",
+    "Indefinite": "Delayed",
+    "Additional": "Scheduled",
+    "Expected": "Scheduled",
+    "Delayed": "Delayed",
+    "Security": "Security"
+  };
+
+  const cleanStatus = fidsStatus.trim();
+  return statusMap[cleanStatus] || "Scheduled"; // Default to Scheduled if unknown
+};
+
+
+
+
+fids.routes.js - 
+import express from "express";
+import { pollFIDSData } from "../controllers/fids.controller.js";
+
+const router = express.Router();
+
+// ✅ Manually trigger FIDS polling (for debugging)
+router.get("/poll", async (req, res) => {
+  await pollFIDSData();
+  res.json({ message: "FIDS polling triggered manually." });
+});
+
+export default router;
+
+
+
+
+announcement.services.js - 
+import axios from "axios";
+import dotenv from "dotenv";
+import fidsDb from "../config/fids_db.config.js"; // FIDS Database
+import afasDb from "../config/afas_db.config.js"; // AFAS Database
+dotenv.config();
+
+// ✅ Get the announcement sequence from Script Manager Service
+export const getAnnouncementSequence = async (announcementType, area) => {
+  try {
+      console.log(`🔍 Fetching script for: ${announcementType} in ${area}`);
+      
+      const [rows] = await afasDb.execute(
+          `SELECT sequence FROM scripts WHERE announcement_type = ? AND area = ? LIMIT 1`,
+          [announcementType, area]
+      );
+
+      if (rows.length === 0) {
+          console.log(`⚠ No script found for ${announcementType} in ${area}`);
+          return null;
+      }
+
+      let sequenceData = rows[0].sequence;
+
+      // ✅ Check if the sequence is already valid JSON
+      if (typeof sequenceData === "string") {
+          if (!sequenceData.startsWith("[") || !sequenceData.endsWith("]")) {
+              console.warn(`⚠ Sequence is not a valid JSON array, treating it as a string: ${sequenceData}`);
+              return [sequenceData]; // Return as an array
+          }
+
+          try {
+              return JSON.parse(sequenceData); // Try parsing JSON
+          } catch (jsonError) {
+              console.error(`❌ Error parsing sequence JSON:`, jsonError);
+              return null;
+          }
+      }
+
+      return sequenceData; // Return directly if already JSON
+  } catch (error) {
+      console.error(`❌ Error fetching sequence:`, error);
+      return null;
+  }
+};
+
+
+// ✅ Send the processed announcement to the Playlist Service
+export const sendToPlaylist = async (announcementData) => {
+  try {
+    console.log(`📢 Sending to playlist:`, announcementData);
+    
+    const response = await axios.post(`${process.env.PLAYLIST_SERVICE_URL}/playlist`, announcementData);
+
+    console.log(`✅ Playlist API Response:`, response.data);
+    return response.data;
+    
+  } catch (error) {
+    console.error(`❌ Error sending to playlist:`, error.message);
+    console.error(`❌ Full Error:`, error.response?.data || error);
+    return null;
+  }
+};
+
+
+
+
+.env - 
+# ✅ FIDS Database (Ubuntu Server)
+FIDS_DB_HOST=192.168.10.230
+FIDS_DB_USER=afas_user
+FIDS_DB_PASS=Infosoft@123
+FIDS_DB_NAME=fids
+
+# ✅ AFAS Database (Local)
+AFAS_DB_HOST=localhost
+AFAS_DB_USER=root
+AFAS_DB_PASS=Infosoft@123
+AFAS_DB_NAME=afas_db
+
+# ✅ Services
+SCRIPT_MANAGER_SERVICE_URL=http://localhost:4006
+PLAYLIST_SERVICE_URL=http://localhost:4005
+
+
+
+app.js - 
+import express from "express";
+import dotenv from "dotenv";
+import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
+import fidsRoutes from "./routes/fids.routes.js";
+import { pollFIDSData } from "./controllers/fids.controller.js";
+
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 4007;
+
+// Define __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
+
+// API Routes
+app.use("/fids", fidsRoutes);
+
+// Start polling every 10 seconds
+setInterval(pollFIDSData, 10000);
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`✅ FIDS Integration Service running on http://localhost:${PORT}`);
+});
+
+
+playlist-service-
+db.config.js :- 
+import mysql from "mysql2/promise";
+import dotenv from "dotenv";
+
+// Load environment variables
+dotenv.config();
+
+// Database connection pool
+const db = mysql.createPool({
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASSWORD || "Infosoft@123",
+  database: process.env.DB_NAME || "afas",
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+});
+
+export default db;
+
+
+
+playlist.controller.js - 
+import db from "../config/db.config.js";
+
+// ✅ Function to Get Indian Standard Time (IST)
+const getISTTime = () => {
+    return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+};
+
+// ✅ Function to Move Flights & Scheduled Messages to `active_playlist`
+export const trackFlightUpdates = async () => {
+    try {
+        console.log("🔄 Tracking flight and scheduled messages updates...");
+
+        // ✅ Get current IST time
+        const now = getISTTime();
+        const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+        const currentTime = now.toTimeString().slice(0, 5); // HH:mm IST format
+        const nextTime = oneHourLater.toTimeString().slice(0, 5);
+        const currentDate = now.toISOString().split("T")[0]; // YYYY-MM-DD
+
+        console.log(`DEBUG: Checking for announcements between ${currentTime} and ${nextTime} on ${currentDate}`);
+
+        // ✅ Fetch upcoming flights from `playlist`
+        const [upcomingFlights] = await db.execute(
+            `SELECT id, flight_number, gate_number, announcement_type, status, 
+                    TIME_FORMAT(std, '%H:%i') AS std, 
+                    TIME_FORMAT(etd, '%H:%i') AS etd, 
+                    city_name, airline_name, arr_dep_flag, flight_date 
+             FROM playlist 
+             WHERE flight_date = ? 
+             AND ((TIME_FORMAT(std, '%H:%i') BETWEEN ? AND ?) 
+             OR (TIME_FORMAT(etd, '%H:%i') BETWEEN ? AND ?))
+             ORDER BY std ASC, etd ASC`,
+            [currentDate, currentTime, nextTime, currentTime, nextTime]
+        );
+
+        console.log("DEBUG: Flights to be added to active playlist:", upcomingFlights);
+
+        // ✅ Insert/Update Flights in `active_playlist`
+        for (const flight of upcomingFlights) {
+            const [existing] = await db.execute(
+                `SELECT id FROM active_playlist WHERE flight_number = ? AND flight_date = ?`,
+                [flight.flight_number, flight.flight_date]
+            );
+
+            if (existing.length > 0) {
+                console.log(`🔄 Updating flight in active_playlist: ${flight.flight_number}`);
+                await db.execute(
+                    `UPDATE active_playlist SET 
+                        gate_number = ?, announcement_type = ?, status = ?, std = ?, etd = ?, 
+                        flight_date = ?, city_name = ?, airline_name = ?, arr_dep_flag = ?, 
+                        created_at = NOW()
+                    WHERE flight_number = ? AND flight_date = ?`,
+                    [
+                        flight.gate_number || null, flight.announcement_type, flight.status,
+                        flight.std, flight.etd, flight.flight_date, flight.city_name, flight.airline_name,
+                        flight.arr_dep_flag, flight.flight_number, flight.flight_date
+                    ]
+                );
+            } else {
+                console.log(`📢 Inserting flight into active_playlist: ${flight.flight_number}`);
+                await db.execute(
+                    `INSERT INTO active_playlist (flight_number, gate_number, announcement_type, status, std, etd, 
+                                                  flight_date, city_name, airline_name, arr_dep_flag, created_at) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+                    [
+                        flight.flight_number, flight.gate_number || null, flight.announcement_type, flight.status,
+                        flight.std, flight.etd, flight.flight_date, flight.city_name, flight.airline_name,
+                        flight.arr_dep_flag
+                    ]
+                );
+            }
+        }
+
+        console.log("✅ Active playlist updated successfully.");
+    } catch (err) {
+        console.error("❌ Error tracking flight updates:", err.message);
+    }
+};
+
+
+// ✅ Run Flight Update Tracker Every 30 Seconds
+setInterval(trackFlightUpdates, 30000);
+
+// ✅ Fetch Active Announcements from `active_playlist`
+export const getActiveAnnouncements = async (req, res) => {
+    try {
+        // ✅ Get current IST time
+        const now = getISTTime();
+        const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+        const currentTime = now.toTimeString().slice(0, 5);
+        const nextTime = oneHourLater.toTimeString().slice(0, 5);
+        const currentDate = now.toISOString().split("T")[0];
+
+        console.log("DEBUG: Fetching active announcements...");
+
+        // ✅ Fetch active flights & scheduled messages from `active_playlist`
+        const [announcements] = await db.execute(
+            `SELECT id, flight_number, gate_number, announcement_type, status, std, etd, 
+                    city_name, airline_name, arr_dep_flag, flight_date 
+             FROM active_playlist 
+             WHERE flight_date = ? 
+             AND ((std BETWEEN ? AND ?) OR (etd BETWEEN ? AND ?))
+             ORDER BY std ASC, etd ASC`,
+            [currentDate, currentTime, nextTime, currentTime, nextTime]
+        );
+
+        console.log("DEBUG: Active Announcements:", announcements);
+
+        // ✅ Format Active Announcements for Response
+        const formattedAnnouncements = announcements.map((announcement) => ({
+            id: `F-${announcement.id}`,
+            announcement_name: `${announcement.announcement_type} (${announcement.arr_dep_flag == 1 ? "Arrival" : "Departure"})`,
+            status: announcement.status,
+            flight_code: announcement.flight_number,
+            airline_name: announcement.airline_name,
+            city_name: announcement.city_name,
+            gate_number: announcement.gate_number || "--",
+            time: announcement.std || announcement.etd,
+            sequence: 1,
+        }));
+
+        res.json(formattedAnnouncements);
+    } catch (err) {
+        console.error("❌ Error fetching active announcements:", err.message);
+        res.status(500).json({ message: "Database error", error: err.message });
+    }
+};
+
+  
+
+
+
+styles.cs :-
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+  }
+  
+  .top-bar {
+    background-color: #333;
+    color: white;
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .side-nav {
+    position: fixed;
+    top: 50px;
+    left: 0;
+    background-color: #444;
+    width: 200px;
+    height: 100%;
+    color: white;
+  }
+  
+  .side-nav ul {
+    list-style: none;
+    padding: 0;
+  }
+  
+  .side-nav ul li {
+    padding: 10px 20px;
+  }
+  
+  .side-nav ul li a {
+    color: white;
+    text-decoration: none;
+  }
+  
+  .side-nav ul li a.active {
+    background-color: #555;
+  }
+  
+  .main-content {
+    margin-left: 220px;
+    padding: 20px;
+  }
+  
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+  }
+  
+  table th, table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+  }
+  
+  table th {
+    background-color: #f4f4f4;
+  }
+  
+  table tr:nth-child(even) {
+    background-color: #f9f9f9;
+  }
+  
+  table tr:hover {
+    background-color: #f1f1f1;
+  }
+  
+  
+
+
+dashboard.js :-
+async function loadActiveAnnouncements() {
+  try {
+      const response = await fetch("/playlist/active");
+
+      if (!response.ok) {
+          throw new Error("Failed to fetch active announcements");
+      }
+
+      const announcements = await response.json();
+      console.log("Active announcements:", announcements);
+
+      const tableBody = document.getElementById("active-announcements");
+      tableBody.innerHTML = ""; // Clear existing entries
+
+      announcements.forEach((announcement, index) => {
+          const row = `<tr>
+              <td>${index + 1}</td>
+              <td>${announcement.name}</td>
+              <td>${announcement.time}</td>
+              <td>${announcement.sequence}</td>
+          </tr>`;
+          tableBody.innerHTML += row;
+      });
+  } catch (error) {
+      console.error("Error loading active announcements:", error.message);
+  }
+}
+
+// Load active announcements on page load
+window.onload = loadActiveAnnouncements;
+
+
+dashboard.html :-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Active Announcements</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <h2>Active Announcements</h2>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>Sr. No.</th>
+                <th>Announcement Name</th>
+                <th>Status</th>
+                <th>Flight Code</th>
+                <th>Airline</th>
+                <th>City</th>
+                <th>Gate</th>
+                <th>Time</th>
+                <th>Sequence</th>
+            </tr>
+        </thead>
+        <tbody id="announcementTableBody"></tbody>
+    </table>
+
+    <script>
+        async function loadActiveAnnouncements() {
+            try {
+                const response = await fetch("http://localhost:4005/playlist/active");
+                const announcements = await response.json();
+
+                const tableBody = document.getElementById("announcementTableBody");
+                tableBody.innerHTML = "";
+
+                announcements.forEach((announcement, index) => {
+                    const row = document.createElement("tr");
+
+                    row.innerHTML = `
+                        <td>${index + 1}</td>
+                        <td>${announcement.announcement_name}</td>
+                        <td>${announcement.status}</td>
+                        <td>${announcement.flight_code || "--"}</td>
+                        <td>${announcement.airline_name || "--"}</td>
+                        <td>${announcement.city_name || "--"}</td>
+                        <td>${announcement.gate_number || "--"}</td>
+                        <td>${announcement.time}</td>
+                        <td>${announcement.sequence}</td>
+                    `;
+
+                    tableBody.appendChild(row);
+                });
+            } catch (error) {
+                console.error("Error loading active announcements:", error);
+            }
+        }
+
+        loadActiveAnnouncements();
+        setInterval(loadActiveAnnouncements, 30000); // Refresh every 30s
+    </script>
+
+</body>
+</html>
+
+
+
+
+playlist.routes.js :-
+// import express from "express";
+// import { getActiveAnnouncements, addToPlaylist } from "../controllers/playlist.controller.js";
+
+// const router = express.Router();
+
+// router.post("/", addToPlaylist);
+// router.get("/active", getActiveAnnouncements);
+
+// export default router;
+
+
+import express from "express";
+import { getActiveAnnouncements } from "../controllers/playlist.controller.js";
+
+const router = express.Router();
+
+// ✅ Fetch Active Announcements
+router.get("/active", getActiveAnnouncements);
+
+export default router;
+
+
+app.js :-
+import express from "express";
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+import playlistRoutes from "./routes/playlist.routes.js";
+
+// Setup for ESM and __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load environment variables
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 4005;
+
+// Middleware
+app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
+
+// Routes
+app.use("/playlist", playlistRoutes);
+
+// Serve Dashboard HTML
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "dashboard.html"));
+});
+
+// Start Server
+app.listen(PORT, () => {
+  console.log(`Playlist Service running on http://localhost:${PORT}`);
+});
+
+
+schedular-service-
+db.config.js--
+import mysql from "mysql2/promise";
+import dotenv from "dotenv";
+
+// Load environment variables
+dotenv.config();
+
+// Create a connection pool
+const db = mysql.createPool({
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASSWORD || "Infosoft@123",
+  database: process.env.DB_NAME || "afas",
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+});
+
+export default db;
+
+
+
+schedular.controller.js--
+import axios from "axios";
+import db from "../config/db.config.js";
+import player from "play-sound";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const audioPlayer = player();
+
+const playAudio = (filePath) => {
+  return new Promise((resolve) => {
+    audioPlayer.play(filePath, (err) => {
+      if (err) console.error("🔴 Error playing audio:", err.message);
+      else console.log("🔊 Playing audio:", filePath);
+      resolve();
+    });
+  });
+};
+
+export const executeSchedules = async () => {
+  try {
+    console.log("⏰ Running Scheduler...");
+
+    const now = new Date();
+    const currentTime = now.toTimeString().slice(0, 5);
+    const currentDay = now.toLocaleString("en-US", { weekday: "short" });
+
+    // 1. 🔊 Play special messages
+    const [schedules] = await db.execute("SELECT * FROM schedules");
+    for (const schedule of schedules) {
+      const timings = Array.isArray(schedule.timing) ? schedule.timing : JSON.parse(schedule.timing);
+      const frequency = schedule.frequency?.split(",") || [];
+
+      if (
+        timings.includes(currentTime) &&
+        (frequency.includes("all") || frequency.includes(currentDay))
+      ) {
+        const audioPath = path.join(
+          __dirname,
+          "../../upload-service/uploads",
+          schedule.language,
+          "specialmessage",
+          schedule.audioId
+        );
+        console.log(`📢 Playing special message: ${schedule.name}`);
+        await playAudio(audioPath);
+      }
+    }
+
+    // 2. 🧠 Get settings
+    const { data: settings } = await axios.get("http://localhost:4010/settings");
+    const {
+      languages,
+      language_order,
+      frequency = 1,
+      audio_lag = 2,
+    } = settings;
+
+    // 3. 🎙 Fetch pending flight announcements
+    const { data: announcements } = await axios.get("http://localhost:4008/audio/active");
+    if (!announcements.length) {
+      console.log("📭 No active flight announcements.\n");
+      return;
+    }
+
+    // 4. 🔁 Sequential playback of flights
+    for (const { flight_number, audio_path, language } of announcements) {
+      console.log(`🎧 Playing Flight ${flight_number} → ${language}`);
+
+      const fullPath = path.join(__dirname, "../../audio-processing-service/output_audio", audio_path);
+      if (!fs.existsSync(fullPath)) {
+        console.warn(`⚠️ File not found: ${fullPath}`);
+        continue;
+      }
+
+      for (let i = 0; i < frequency; i++) {
+        console.log(`🔁 [${language.toUpperCase()}] Repeat ${i + 1}/${frequency}`);
+        await playAudio(fullPath);
+        if (i < frequency - 1) {
+          await new Promise((r) => setTimeout(r, audio_lag * 1000));
+        }
+      }
+
+      // ✅ Mark flight as announced
+      await axios.post("http://localhost:4008/audio/mark-announced", { flight_number });
+      console.log(`✅ Marked flight ${flight_number} as Completed`);
+
+      // ⏳ Wait before next flight
+      await new Promise((r) => setTimeout(r, audio_lag * 1000));
+    }
+
+  } catch (err) {
+    console.error("❌ Error in scheduler execution:", err?.message || err);
+  }
+};
+
+// ======== REST APIs ========
+
+export const getLanguages = async (req, res) => {
+  try {
+    const { data } = await axios.get("http://localhost:4003/languages");
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ message: "Upload Service error", error: err.message });
+  }
+};
+
+export const getAudioFiles = async (req, res) => {
+  try {
+    const { language } = req.query;
+    const { data } = await axios.get("http://localhost:4003/audio-files", {
+      params: { language, type: "specialmessage" },
+    });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ message: "Upload Service error", error: err.message });
+  }
+};
+
+export const createSchedule = async (req, res) => {
+  const { name, language, audioId, timings, startDate, endDate, frequency } = req.body;
+  try {
+    await db.execute(
+      "INSERT INTO schedules (name, language, audioId, timing, start_date, end_date, frequency) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [name, language, audioId, JSON.stringify(timings), startDate, endDate, frequency.join(",")]
+    );
+    res.status(201).send("Schedule created successfully.");
+  } catch (err) {
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+export const getSchedules = async (req, res) => {
+  try {
+    const [schedules] = await db.execute("SELECT * FROM schedules");
+    res.json(schedules);
+  } catch (err) {
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+export const deleteSchedule = async (req, res) => {
+  const { id } = req.params;
+  try {
+    await db.execute("DELETE FROM schedules WHERE id = ?", [id]);
+    res.status(204).send();
+  } catch (err) {
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+export const announceFlight = async (req, res) => {
+  const { flight_number, audio_path, language } = req.body;
+  if (!audio_path) return res.status(400).json({ message: "Missing audio_path" });
+
+  const fullPath = path.join(__dirname, "../../audio-processing-service/output_audio", audio_path);
+
+  if (!fs.existsSync(fullPath)) {
+    console.error("❌ Audio file not found:", fullPath);
+    return res.status(404).json({ message: "Audio file not found" });
+  }
+
+  try {
+    console.log(`🎧 Announcing Flight ${flight_number} from: ${fullPath}`);
+    await playAudio(fullPath);
+    res.status(200).json({ message: "Flight announcement played" });
+  } catch (err) {
+    console.error("❌ Playback error:", err.message);
+    res.status(500).json({ message: "Failed to play audio", error: err.message });
+  }
+};
+
+
+
+
+public/css/scheduler.css--
+/* General Layout */
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+  }
+  
+  .top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #333;
+    color: white;
+    padding: 10px 20px;
+  }
+  
+  .side-nav {
+    position: fixed;
+    top: 50px;
+    left: 0;
+    background-color: #444;
+    width: 200px;
+    height: 100%;
+    color: white;
+  }
+  
+  .side-nav ul {
+    list-style: none;
+    padding: 0;
+  }
+  
+  .side-nav ul li {
+    padding: 10px 20px;
+  }
+  
+  .side-nav ul li a {
+    color: white;
+    text-decoration: none;
+  }
+  
+  .side-nav ul li a.active {
+    background-color: #555;
+  }
+  
+  .main-content {
+    margin-left: 220px;
+    padding: 20px;
+  }
+  
+  /* Form Styling */
+  form {
+    margin-bottom: 20px;
+  }
+  
+  form label {
+    display: block;
+    margin: 10px 0 5px;
+  }
+  
+  form input, form select, form button {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+    padding: 8px;
+  }
+  
+
+
+
+  public/js/schedular.js--
+  async function loadLanguages() {
+  const response = await fetch("/scheduler/languages");
+  const languages = await response.json();
+
+  const languageDropdown = document.getElementById("language");
+  languageDropdown.innerHTML = "<option value='' disabled selected>Select a language</option>";
+
+  languages.forEach((language) => {
+    const option = document.createElement("option");
+    option.value = language;
+    option.textContent = language.charAt(0).toUpperCase() + language.slice(1);
+    languageDropdown.appendChild(option);
+  });
+}
+
+async function loadAudioFiles(language) {
+  const response = await fetch(`/scheduler/audio-files?language=${language}`);
+  const audioFiles = await response.json();
+
+  const audioDropdown = document.getElementById("audio");
+  audioDropdown.innerHTML = "<option value='' disabled selected>Select an announcement</option>";
+
+  audioFiles.forEach((file) => {
+    const option = document.createElement("option");
+    option.value = file;
+    option.textContent = file;
+    audioDropdown.appendChild(option);
+  });
+}
+
+document.getElementById("language").addEventListener("change", (e) => {
+  const selectedLanguage = e.target.value;
+  loadAudioFiles(selectedLanguage);
+});
+
+// Add new timing input
+document.getElementById("add-timing").addEventListener("click", () => {
+  const timingContainer = document.getElementById("timing-container");
+
+  const newTimingInput = document.createElement("input");
+  newTimingInput.type = "time";
+  newTimingInput.className = "timing-field";
+  timingContainer.appendChild(newTimingInput);
+});
+
+// Save a schedule
+document.getElementById("scheduler-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const name = document.getElementById("name").value;
+  const language = document.getElementById("language").value;
+  const audioId = document.getElementById("audio").value;
+
+  const timings = Array.from(document.querySelectorAll(".timing-field")).map((input) => input.value);
+  const startDate = document.getElementById("start-date").value;
+  const endDate = document.getElementById("end-date").value;
+
+  const frequency = Array.from(document.getElementById("frequency").selectedOptions).map((option) => option.value);
+
+  console.log("Submitting schedule:", { name, language, audioId, timings, startDate, endDate, frequency });
+
+  try {
+    const response = await fetch("/scheduler", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, language, audioId, timings, startDate, endDate, frequency }),
+    });
+
+    if (response.ok) {
+      alert("Schedule saved successfully!");
+      loadSchedules();
+    } else {
+      const error = await response.json();
+      console.error("Error response from server:", error);
+      alert("Error saving schedule: " + error.message);
+    }
+  } catch (error) {
+    console.error("Error saving schedule:", error.message);
+  }
+});
+
+
+async function loadSchedules() {
+  try {
+    const response = await fetch("/scheduler");
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch schedules: ${response.statusText}`);
+    }
+
+    const textResponse = await response.text(); // Get raw response
+    console.log("Raw response from /scheduler:", textResponse); // Debug log
+
+    const schedules = JSON.parse(textResponse.replace(/^\uFEFF/, "")); // Remove BOM if present
+    console.log("Parsed schedules:", schedules); // Debug log
+
+    const tableBody = document.getElementById("schedule-table");
+    tableBody.innerHTML = ""; // Clear the table
+
+    schedules.forEach((schedule, index) => {
+      // Directly use the timing field if it's already an array
+      const timings = Array.isArray(schedule.timing) ? schedule.timing : JSON.parse(schedule.timing);
+
+      // Parse frequency if it’s a stringified JSON array
+      let frequency;
+      try {
+        frequency = JSON.parse(schedule.frequency);
+      } catch (e) {
+        frequency = schedule.frequency; // Use as-is if not JSON
+      }
+
+      const row = `<tr>
+        <td>${index + 1}</td>
+        <td>${schedule.name || "Unnamed Schedule"}</td>
+        <td>${schedule.audioId}</td>
+        <td>${timings.join(", ")}</td>
+        <td>${new Date(schedule.start_date).toLocaleDateString()} - ${new Date(schedule.end_date).toLocaleDateString()}</td>
+        <td>${Array.isArray(frequency) ? frequency.join(", ") : frequency}</td>
+        <td><button onclick="deleteSchedule(${schedule.id})">Delete</button></td>
+      </tr>`;
+      tableBody.innerHTML += row;
+    });
+  } catch (error) {
+    console.error("Error loading schedules:", error.message);
+  }
+}
+
+
+
+
+
+// Delete a schedule
+async function deleteSchedule(id) {
+  try {
+    const response = await fetch(`/scheduler/${id}`, { method: "DELETE" });
+    if (response.ok) {
+      loadSchedules();
+    } else {
+      alert("Error deleting schedule.");
+    }
+  } catch (error) {
+    console.error("Error deleting schedule:", error.message);
+  }
+}
+
+loadLanguages();
+loadSchedules();
+
+
+
+public/schedular.html--
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scheduler</title>
+  <link rel="stylesheet" href="css/scheduler.css">
+</head>
+<body>
+  <header class="top-bar">
+    <h1>Welcome to AFAS</h1>
+    <button id="logout-button">Logout</button>
+  </header>
+
+  <nav class="side-nav">
+    <ul>
+      <li><a href="/dashboard">Dashboard</a></li>
+      <li><a href="/upload">Upload Audio</a></li>
+      <li><a href="/scheduler" class="active">Scheduler</a></li>
+    </ul>
+  </nav>
+
+  <main class="main-content">
+    <h2>Scheduler</h2>
+    <form id="scheduler-form">
+      <label for="name">Schedule Name:</label>
+      <input type="text" id="name" placeholder="Enter schedule name" required>
+    
+      <label for="language">Language:</label>
+      <select id="language" required></select>
+    
+      <label for="audio">Announcement:</label>
+      <select id="audio" required></select>
+    
+      <label for="timing">Timing:</label>
+      <div id="timing-container">
+        <input type="time" class="timing-field" required>
+        <button type="button" id="add-timing">+</button>
+      </div>
+    
+      <label for="start-date">From:</label>
+      <input type="date" id="start-date" required>
+    
+      <label for="end-date">To:</label>
+      <input type="date" id="end-date" required>
+    
+      <label for="frequency">Frequency:</label>
+      <select id="frequency" multiple>
+        <option value="all">Select All</option>
+        <option value="Mon">Monday</option>
+        <option value="Tue">Tuesday</option>
+        <option value="Wed">Wednesday</option>
+        <option value="Thu">Thursday</option>
+        <option value="Fri">Friday</option>
+        <option value="Sat">Saturday</option>
+        <option value="Sun">Sunday</option>
+      </select>
+      <button type="submit">Save Schedule</button>
+    </form>
+    
+
+    <h2>Schedules</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Sr. No.</th>
+          <th>Name</th>
+          <th>Announcement</th>
+          <th>Timing</th>
+          <th>From - To</th>
+          <th>Frequency</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="schedule-table"></tbody>
+    </table>    
+  </main>
+
+  <script src="js/scheduler.js"></script>
+</body>
+</html>
+
+
+
+schedular.routes.js--
+import express from "express";
+import { getLanguages, getAudioFiles, createSchedule, getSchedules, deleteSchedule,announceFlight} from "../controllers/schedular.controller.js";
+
+const router = express.Router();
+
+router.get("/languages", getLanguages); // Get available languages
+router.get("/audio-files", getAudioFiles); // Get audio files for a language
+router.post("/", createSchedule); // Create a new schedule
+router.get("/", getSchedules); // Get all schedules
+router.delete("/:id", deleteSchedule); // Delete a schedule
+router.post("/announce", announceFlight);
+
+export default router;
+
+
+
+app.js--
+import express from "express";
+import path from "path";
+import dotenv from "dotenv";
+import schedulerRoutes from "./routes/schedular.routes.js";
+import { executeSchedules } from "./controllers/schedular.controller.js";
+
+
+// Load environment variables
+dotenv.config();
+
+const app = express();
+const __dirname = path.resolve();
+
+// Middleware to parse JSON
+app.use(express.json());
+
+// Run the schedule executor every minute
+setInterval(() => {
+  console.log("Checking for schedules...");
+  executeSchedules();
+}, 60000); // 60 seconds
+
+
+// Serve static files (HTML, CSS, JS)
+app.use(express.static(path.join(__dirname, "public")));
+
+// API routes for scheduler
+app.use("/scheduler", schedulerRoutes);
+
+// Serve the Scheduler HTML page
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "scheduler.html"));
+});
+
+
+
+// Start the server
+const PORT = process.env.PORT || 4004;
+app.listen(PORT, () => {
+  console.log(`Scheduler Service running on http://localhost:${PORT}`);
+});
+
+
+
+
+scriptmanager-service-
+config/db.config.js - 
+import mysql from "mysql2/promise"; 
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const db = mysql.createPool({
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASSWORD || "Infosoft@123",
+  database: process.env.DB_NAME || "afas",
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+});
+
+export default db;
+
+
+controllers/announcementtype.controller.js - 
+import db from "../config/db.config.js";
+import axios from "axios";
+
+// ✅ Fetch languages dynamically
+export const getLanguages = async (req, res) => {
+  try {
+    console.log("📢 Fetching languages...");
+    const response = await axios.get("http://localhost:4003/languages");
+    res.json(response.data);
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching languages", error: err.message });
+  }
+};
+
+// ✅ Fetch announcement types for selected language & area
+export const getAnnouncementTypes = async (req, res) => {
+  const { language, area } = req.query;
+
+  if (!language || !area) {
+    return res.status(400).json({ message: "Language and Area are required." });
+  }
+
+  try {
+    console.log(`🔍 Fetching announcement types for Language: ${language}, Area: ${area}`);
+    const [types] = await db.execute(
+      "SELECT type FROM announcement_types WHERE language = ? AND area = ?",
+      [language, area]
+    );
+
+    res.json(types.map(row => row.type));
+  } catch (err) {
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+
+export const addAnnouncementType = async (req, res) => {
+  const { language, type, area } = req.body;
+
+  if (!language || !type || !area) {
+    return res.status(400).json({ message: "Language, Type, and Area are required." });
+  }
+
+  try {
+    console.log(`➕ Adding Announcement Type: ${type}, Language: ${language}, Area: ${area}`);
+
+    await db.execute(
+      "INSERT INTO announcement_types (language, type, area) VALUES (?, ?, ?)",
+      [language, type, area]
+    );
+
+    console.log("✅ Announcement Type added successfully!");
+    res.status(201).json({ message: "Announcement type added successfully." });
+  } catch (err) {
+    console.error("❌ Error adding announcement type:", err.message);
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+
+// ✅ Delete an announcement type for a selected language
+export const deleteAnnouncementType = async (req, res) => {
+  const { type } = req.params;
+  const { language } = req.query;
+
+  if (!language || !type) {
+    return res.status(400).json({ message: "Language and type are required." });
+  }
+
+  try {
+    console.log(`🗑 Deleting announcement type: ${type} for language: ${language}`);
+
+    await db.execute(
+      "DELETE FROM announcement_types WHERE language = ? AND type = ?",
+      [language, type]
+    );
+
+    console.log("✅ Announcement Type deleted successfully!");
+    res.status(204).send();
+  } catch (err) {
+    console.error("❌ Error deleting announcement type:", err.message);
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+
+
+
+controller/scriptmanager.controller.js - 
+import db from "../config/db.config.js";
+
+// ✅ Fetch transcription for a given sequence of audio files
+export const getTranscriptions = async (req, res) => {
+  const { sequence, language } = req.query;
+
+  if (!sequence || !language) {
+    return res.status(400).json({ message: "Sequence and Language parameters are required." });
+  }
+
+  const sequenceArray = sequence.split(",").map(s => s.trim());
+  const transcriptions = [];
+
+  for (const audio of sequenceArray) {
+    if (audio.startsWith("*") && audio.endsWith("*")) {
+      transcriptions.push(audio);
+    } else {
+      try {
+        const [result] = await db.execute(
+          `SELECT transcription FROM audios 
+           WHERE LOWER(REPLACE(filePath, '\\\\', '/')) LIKE LOWER(?) 
+           AND LOWER(language) = LOWER(?)`,
+          [`%/${audio}.wav`, language]
+        );
+
+        if (result.length > 0) {
+          transcriptions.push(result[0].transcription || "N/A");
+        } else {
+          transcriptions.push("N/A");
+        }
+      } catch (err) {
+        console.error(`❌ Error fetching transcription for ${audio}:`, err.message);
+        transcriptions.push("N/A");
+      }
+    }
+  }
+
+  res.json({ transcriptions });
+};
+
+// ✅ Add a new script
+export const addScript = async (req, res) => {
+  const { language, announcementType, sequence, transcription, area } = req.body;
+
+  if (!language || !announcementType || !sequence || !area) {
+    return res.status(400).json({ message: "All fields are required." });
+  }
+
+  try {
+    const sequenceArray = sequence
+      .split(",")
+      .map(s => s.trim())
+      .filter(s => s !== "");
+
+    const sequenceJSON = JSON.stringify(sequenceArray);
+
+    await db.execute(
+      "INSERT INTO scripts (language, announcement_type, sequence, transcription, area) VALUES (?, ?, ?, ?, ?)",
+      [language, announcementType, sequenceJSON, transcription, area]
+    );
+
+    res.status(201).json({ message: "Script added successfully." });
+  } catch (err) {
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+// ✅ Update script
+export const updateScript = async (req, res) => {
+  const { id } = req.params;
+  const { announcementType, language, sequence, transcription, area } = req.body;
+
+  try {
+    const sequenceArray = sequence
+      .split(",")
+      .map(s => s.trim())
+      .filter(s => s !== "");
+
+    const sequenceJSON = JSON.stringify(sequenceArray);
+
+    await db.execute(
+      "UPDATE scripts SET announcement_type = ?, language = ?, sequence = ?, transcription = ?, area = ? WHERE id = ?",
+      [announcementType, language, sequenceJSON, transcription, area, id]
+    );
+
+    res.status(200).json({ message: "Script updated successfully." });
+  } catch (err) {
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+// ✅ Get script by ID
+export const getScriptById = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const [script] = await db.execute("SELECT * FROM scripts WHERE id = ?", [id]);
+
+    if (script.length === 0) {
+      return res.status(404).json({ message: "Script not found" });
+    }
+
+    res.json(script[0]);
+  } catch (err) {
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+// ✅ Fetch scripts
+export const getScripts = async (req, res) => {
+  const { language, area } = req.query;
+  if (!language || !area) {
+    return res.status(400).json({ message: "Language and Area are required." });
+  }
+
+  try {
+    const [scripts] = await db.execute(
+      "SELECT id, language, announcement_type, sequence, transcription, area FROM scripts WHERE language = ? AND area = ?",
+      [language, area]
+    );
+
+    res.json(scripts);
+  } catch (err) {
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+// ✅ Delete
+export const deleteScript = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    await db.execute("DELETE FROM scripts WHERE id = ?", [id]);
+    res.status(204).send();
+  } catch (err) {
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+// ✅ Get languages for UI
+export const getLanguages = async (req, res) => {
+  try {
+    const [languages] = await db.execute("SELECT DISTINCT language FROM announcement_types");
+    res.json(languages.map(row => row.language));
+  } catch (err) {
+    console.error("Error fetching languages:", err.message);
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+
+
+
+
+
+
+
+public/css/styles.css - 
+/* General Styles */
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f4f4f9;
+  color: #333;
+}
+
+header {
+  background-color: #2a2d37;
+  color: white;
+  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+header h1 {
+  margin: 0;
+}
+
+header #logout-button {
+  background-color: #e74c3c;
+  border: none;
+  color: white;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+header #logout-button:hover {
+  background-color: #c0392b;
+}
+
+.side-nav {
+  width: 200px;
+  background-color: #2a2d37;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  color: white;
+  padding: 1rem;
+}
+
+.side-nav ul {
+  list-style: none;
+  padding: 0;
+}
+
+.side-nav ul li {
+  margin-bottom: 1rem;
+}
+
+.side-nav ul li a {
+  color: white;
+  text-decoration: none;
+}
+
+.side-nav ul li a.active {
+  font-weight: bold;
+  text-decoration: underline;
+}
+
+.main-content {
+  margin-left: 220px;
+  padding: 2rem;
+}
+
+h2 {
+  margin-top: 0;
+}
+
+form label {
+  display: block;
+  margin: 1rem 0 0.5rem;
+}
+
+form input, form select, form textarea, form button {
+  width: 100%;
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
+
+form textarea {
+  resize: none;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 2rem;
+}
+
+table th, table td {
+  border: 1px solid #ddd;
+  padding: 0.75rem;
+  text-align: left;
+}
+
+table th {
+  background-color: #2a2d37;
+  color: white;
+}
+
+
+
+
+
+public/js/announcementtype.js - 
+// ✅ Fetch and populate languages dynamically from Upload Service
+async function loadLanguages() {
+  try {
+    console.log("📢 Fetching languages...");
+    const response = await fetch("/announcementtype/languages"); // ✅ Fetch from Upload Service
+    if (!response.ok) throw new Error(`Failed to fetch languages. Status: ${response.status}`);
+
+    const languages = await response.json();
+    console.log("✅ Available Languages:", languages);
+
+    // ✅ Populate language tabs dynamically
+    const languageTabs = document.querySelector(".language-tabs");
+    languageTabs.innerHTML = "";
+
+    languages.forEach((language, index) => {
+      const button = document.createElement("button");
+      button.className = `language-tab ${index === 0 ? "active" : ""}`;
+      button.setAttribute("data-lang", language);
+      button.textContent = language.charAt(0).toUpperCase() + language.slice(1);
+
+      button.addEventListener("click", () => {
+        document.querySelector(".language-tab.active").classList.remove("active");
+        button.classList.add("active");
+        loadAnnouncementTypes(language);
+      });
+
+      languageTabs.appendChild(button);
+    });
+
+    // ✅ Auto-load announcement types for the first language
+    if (languages.length > 0) {
+      loadAnnouncementTypes(languages[0]);
+    }
+  } catch (err) {
+    console.error("❌ Error fetching languages:", err.message);
+  }
+}
+
+// ✅ Fetch announcement types after selecting a language and area
+async function loadAnnouncementTypes(language) {
+  if (!language) {
+    console.warn("🚨 No language selected. Skipping API call.");
+    return;
+  }
+
+  // ✅ Get selected area from dropdown
+  const area = document.getElementById("area")?.value;
+  if (!area) {
+    console.warn("🚨 No area selected. Skipping API call.");
+    return;
+  }
+
+  console.log(`🔗 Fetching announcement types for: ${language}, Area: ${area}`);
+
+  try {
+    const response = await fetch(`/announcementtype/types?language=${encodeURIComponent(language)}&area=${encodeURIComponent(area)}`);
+    if (!response.ok) throw new Error(`Failed to fetch announcement types. Status: ${response.status}`);
+
+    const types = await response.json();
+    console.log("✅ Fetched announcement types:", types);
+
+    const typeTable = document.getElementById("typesTable");
+    typeTable.innerHTML = "";
+
+    types.forEach((type, index) => {
+      const row = `<tr>
+        <td>${index + 1}</td>
+        <td>${language}</td>
+        <td>${area}</td>
+        <td>${type}</td>
+        <td><button onclick="deleteType('${type}', '${language}', '${area}')">🗑 Delete</button></td>
+      </tr>`;
+      typeTable.innerHTML += row;
+    });
+
+  } catch (err) {
+    console.error("❌ Error loading announcement types:", err.message);
+  }
+}
+
+// ✅ Add a new announcement type
+async function addAnnouncementType(e) {
+  e.preventDefault();
+
+  const language = document.querySelector(".language-tab.active")?.getAttribute("data-lang");
+  const area = document.getElementById("area").value;
+  const newType = document.getElementById("newType").value.trim();
+
+  if (!language || !newType || !area) {
+    alert("⚠️ Please select all fields.");
+    return;
+  }
+
+  try {
+    const response = await fetch("/announcementtype/types", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ language, type: newType, area }),
+    });
+
+    if (response.ok) {
+      alert("✅ Announcement Type added successfully!");
+      loadAnnouncementTypes(language);
+    }
+  } catch (err) {
+    console.error("❌ Error adding Announcement Type:", err.message);
+  }
+}
+
+// ✅ Delete an announcement type
+async function deleteType(type, language, area) {
+  if (!confirm(`⚠️ Are you sure you want to delete '${type}'?`)) return;
+
+  try {
+    const response = await fetch(`/announcementtype/types/${encodeURIComponent(type)}?language=${encodeURIComponent(language)}&area=${encodeURIComponent(area)}`, { method: "DELETE" });
+
+    if (response.ok) {
+      alert("✅ Announcement Type deleted successfully!");
+      loadAnnouncementTypes(language);
+    } else {
+      alert("❌ Failed to delete Announcement Type.");
+    }
+  } catch (err) {
+    console.error("❌ Error deleting Announcement Type:", err.message);
+  }
+}
+
+// ✅ Initialize Page
+console.log("🔄 Page Loaded: Fetching Languages...");
+loadLanguages();
+
+// ✅ Event Listener
+document.getElementById("announcementtype-form").addEventListener("submit", addAnnouncementType);
+
+
+
+
+public/js/scriptmanager.js - 
+// ✅ Load languages dynamically from Upload Service
+async function loadLanguages() {
+  try {
+    console.log("📢 Fetching languages...");
+    const response = await fetch("/announcementtype/languages");
+    if (!response.ok) throw new Error(`Failed to fetch languages. Status: ${response.status}`);
+
+    const languages = await response.json();
+    console.log("✅ Available Languages:", languages);
+
+    const languageTabs = document.querySelector(".language-tabs");
+    languageTabs.innerHTML = "";
+
+    languages.forEach((language, index) => {
+      const button = document.createElement("button");
+      button.className = `language-tab ${index === 0 ? "active" : ""}`;
+      button.setAttribute("data-lang", language);
+      button.textContent = language.charAt(0).toUpperCase() + language.slice(1);
+
+      button.addEventListener("click", () => {
+        document.querySelector(".language-tab.active")?.classList.remove("active");
+        button.classList.add("active");
+        loadAnnouncementTypes(language);
+        loadScripts();
+      });
+
+      languageTabs.appendChild(button);
+    });
+
+    if (languages.length > 0) {
+      loadAnnouncementTypes(languages[0]);
+      loadScripts();
+    }
+  } catch (err) {
+    console.error("❌ Error fetching languages:", err.message);
+  }
+}
+
+// ✅ Get the selected language from active tab
+function getSelectedLanguage() {
+  return document.querySelector(".language-tab.active")?.getAttribute("data-lang") || "english"; // Default to English
+}
+
+// ✅ Fetch Announcement Types based on Language & Area
+async function loadAnnouncementTypes(language = getSelectedLanguage()) {
+  const area = document.getElementById("area")?.value;
+  if (!language || !area) return;
+
+  console.log(`🔗 Fetching announcement types for: ${language}, Area: ${area}`);
+
+  try {
+    const response = await fetch(`/announcementtype/types?language=${encodeURIComponent(language)}&area=${encodeURIComponent(area)}`);
+    
+    if (!response.ok) throw new Error(`Failed to fetch announcement types. Status: ${response.status}`);
+
+    const types = await response.json();
+    console.log("✅ Fetched announcement types:", types);
+
+    const typeDropdown = document.getElementById("announcementType");
+    typeDropdown.innerHTML = "<option value='' disabled selected>Select Announcement Type</option>";
+
+    types.forEach((type) => {
+      const option = document.createElement("option");
+      option.value = type;
+      option.textContent = type;
+      typeDropdown.appendChild(option);
+    });
+
+  } catch (err) {
+    console.error("❌ Error loading announcement types:", err.message);
+  }
+}
+
+// ✅ Fetch transcriptions from Upload Audio Service
+async function getTranscription() {
+  const sequence = document.getElementById("sequence").value.trim();
+  if (!sequence) {
+    alert("⚠️ Please enter a sequence before fetching transcriptions.");
+    return;
+  }
+
+  try {
+    const language = getSelectedLanguage();
+    console.log(`🔍 Fetching transcription for: ${sequence} in ${language}`);
+
+    const response = await fetch(`/scriptmanager/transcriptions?sequence=${encodeURIComponent(sequence)}&language=${encodeURIComponent(language)}`);
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch transcriptions. Status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log("✅ Transcription Response:", data);
+
+    document.getElementById("transcription").value = data.transcriptions.join(" ");
+  } catch (err) {
+    console.error("❌ Error fetching transcription:", err.message);
+    alert("❌ Failed to fetch transcription.");
+  }
+}
+
+// ✅ Attach event listener to "Get Transcription" button
+document.getElementById("get-transcription").addEventListener("click", getTranscription);
+
+
+// ✅ Fetch scripts based on language & area
+async function loadScripts() {
+  const language = getSelectedLanguage();
+  const area = document.getElementById("area")?.value;
+
+  if (!language || !area) {
+    console.warn("🚨 No language or area selected. Skipping API call.");
+    return;
+  }
+
+  console.log(`🔄 Fetching scripts for: ${language}, Area: ${area}`);
+
+  try {
+    const response = await fetch(`/scriptmanager/scripts?language=${encodeURIComponent(language)}&area=${encodeURIComponent(area)}`);
+    if (!response.ok) throw new Error("Failed to fetch scripts.");
+
+    const scripts = await response.json();
+    console.log("✅ Loaded Scripts:", scripts);
+
+    const tableBody = document.getElementById("scriptsTable");
+    tableBody.innerHTML = "";
+
+    scripts.forEach((script, index) => {
+      const row = `<tr>
+        <td>${index + 1}</td>
+        <td>${script.announcement_type}</td> 
+        <td>${script.sequence}</td>
+        <td>${script.transcription || "N/A"}</td>
+        <td>
+          <button onclick="editScript(${script.id})">✏️ Edit</button>
+          <button onclick="deleteScript(${script.id})">🗑 Delete</button>
+        </td>
+      </tr>`;
+      tableBody.innerHTML += row;
+    });
+  } catch (err) {
+    console.error("❌ Error loading scripts:", err.message);
+  }
+}
+
+// ✅ Edit a script
+async function editScript(id) {
+  try {
+    console.log(`🔍 Fetching script details for ID: ${id}`);
+    
+    const response = await fetch(`/scriptmanager/scripts/${id}`);
+    if (!response.ok) throw new Error("Failed to fetch script details.");
+
+    const script = await response.json();
+    console.log("✅ Script loaded:", script);
+
+    document.getElementById("script-id").value = script.id;
+    document.getElementById("announcementType").value = script.announcement_type;
+    document.getElementById("sequence").value = script.sequence;
+    document.getElementById("transcription").value = script.transcription || "";
+
+    document.getElementById("add-script-btn").textContent = "Update Sequence";
+  } catch (err) {
+    console.error("❌ Error editing script:", err.message);
+  }
+}
+
+// ✅ Delete a script
+async function deleteScript(id) {
+  try {
+    const response = await fetch(`/scriptmanager/scripts/${id}`, { method: "DELETE" });
+    if (response.ok) {
+      alert("✅ Script deleted successfully!");
+      loadScripts();
+    } else {
+      alert("❌ Failed to delete script.");
+    }
+  } catch (err) {
+    console.error("❌ Error deleting script:", err.message);
+  }
+}
+
+// ✅ Update announcement types when area changes
+document.getElementById("area").addEventListener("change", () => {
+  const language = getSelectedLanguage();
+  loadAnnouncementTypes(language);
+});
+
+// ✅ Reset form fields after adding or updating a script
+function resetForm() {
+  document.getElementById("script-id").value = "";
+  document.getElementById("announcementType").value = "";
+  document.getElementById("sequence").value = "";
+  document.getElementById("transcription").value = "";
+  document.getElementById("add-script-btn").textContent = "Add Sequence";
+}
+
+// ✅ Add or update a script
+async function addOrUpdateScript(e) {
+  e.preventDefault();
+
+  const scriptId = document.getElementById("script-id").value || "";
+  const language = getSelectedLanguage();
+  const announcementType = document.getElementById("announcementType").value;
+  const sequence = document.getElementById("sequence").value.trim();
+  const transcription = document.getElementById("transcription").value.trim();
+  const area = document.getElementById("area").value; // ✅ Added area
+
+  if (!language || !announcementType || !sequence || !area) {
+    alert("⚠️ All fields are required.");
+    return;
+  }
+
+  const payload = { language, announcementType, sequence, transcription, area };
+  const method = scriptId ? "PUT" : "POST";
+  const url = scriptId ? `/scriptmanager/scripts/${scriptId}` : "/scriptmanager/scripts";
+
+  try {
+    const response = await fetch(url, {
+      method: method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (response.ok) {
+      alert(scriptId ? "✅ Script updated successfully!" : "✅ Script added successfully!");
+      resetForm();
+      loadScripts();
+    } else {
+      const errorData = await response.json();
+      console.error("❌ Failed to save script:", errorData);
+      alert("❌ Failed to save script: " + errorData.message);
+    }
+  } catch (err) {
+    console.error("❌ Error saving script:", err.message);
+  }
+}
+
+// ✅ Attach event listener to form submission
+document.getElementById("scriptmanager-form").addEventListener("submit", addOrUpdateScript);
+
+// ✅ Initialize Page
+console.log("🔄 Page Loaded: Fetching Languages...");
+loadLanguages();
+
+
+
+
+
+public/announcementtype.html - 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Announcement Type</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <!-- Top Bar -->
+  <header class="top-bar">
+    <h1>Welcome to AFAS</h1>
+    <button id="logout-button">Logout</button>
+  </header>
+
+  <!-- Side Navigation Bar -->
+  <nav class="side-nav">
+    <ul>
+      <li><a href="/dashboard">Dashboard</a></li>
+      <li><a href="/upload">Upload Audio</a></li>
+      <li><a href="/announcementtype" class="active">Announcement Type</a></li>
+      <li><a href="/scriptmanager">Sequence</a></li>
+      <li><a href="/scheduler">Scheduler</a></li>
+      <li><a href="/zones">Zones</a></li>
+      <li><a href="/zone-selector">Zone Selector</a></li>
+      <li><a href="/users">Users</a></li>
+      <li><a href="/permissions">Permissions</a></li>
+    </ul>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <h2>Manage Announcement Types</h2>
+
+    <label for="area">Select Area *</label>
+    <select id="area">
+      <option value="Arrival">Arrival</option>
+      <option value="Departure">Departure</option>
+      <option value="Common">Common</option>
+    </select>
+    
+    <!-- Language Tabs (Same as Script Manager Page) -->
+    <div class="language-tabs">
+      <button class="language-tab active" data-lang="english">English</button>
+      <button class="language-tab" data-lang="hindi">Hindi</button>
+      <button class="language-tab" data-lang="regional">Regional</button>
+    </div>
+
+
+
+
+    <!-- Form for Adding an Announcement Type -->
+    <form id="announcementtype-form">
+      <label for="newType">New Announcement Type *</label>
+      <input type="text" id="newType" placeholder="Enter announcement type" required>
+      <button type="submit">Add Type</button>
+    </form>
+
+    <!-- Existing Announcement Types -->
+    <h2>Existing Announcement Types</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Language</th>
+          <th>Type</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="typesTable"></tbody>
+    </table>
+  </main>
+
+  <script src="js/announcementtype.js"></script>
+</body>
+</html>
+
+
+
+
+
+public/scriptmanager.html - 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Script Manager</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <!-- Top Bar -->
+  <header class="top-bar">
+    <h1>Welcome to AFAS</h1>
+    <button id="logout-button">Logout</button>
+  </header>
+
+  <!-- Side Navigation Bar -->
+  <nav class="side-nav">
+    <ul>
+      <li><a href="/dashboard">Dashboard</a></li>
+      <li><a href="/upload">Upload Audio</a></li>
+      <li><a href="/announcementtype">Announcement Type</a></li>
+      <li><a href="/scriptmanager" class="active">Sequence</a></li>
+      <li><a href="/scheduler">Scheduler</a></li>
+      <li><a href="/zones">Zones</a></li>
+      <li><a href="/zone-selector">Zone Selector</a></li>
+      <li><a href="/users">Users</a></li>
+      <li><a href="/permissions">Permissions</a></li>
+    </ul>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <h2>Sequence</h2>
+    <label for="area">Select Area *</label>
+<select id="area" onchange="loadAnnouncementTypes(document.querySelector('.language-tab.active')?.getAttribute('data-lang'))">
+  <option value="Arrival">Arrival</option>
+  <option value="Departure">Departure</option>
+  <option value="Common">Common</option>
+</select>
+
+
+    <!-- Language Tabs -->
+    <div class="language-tabs"></div>
+
+    <!-- Form for Adding a Script -->
+    <form id="scriptmanager-form">
+      <!-- Hidden field for script ID (used for editing) -->
+<input type="hidden" id="script-id">
+
+
+<label for="announcementType">Announcement Type *</label>
+<select id="announcementType" required>
+  <option value="" disabled selected>Select Announcement Type</option>
+</select>
+
+<label for="sequence">Sequence *</label>
+<input type="text" id="sequence" placeholder="Enter sequence (comma-separated)" required>
+
+<!-- ✅ "Get Transcription" Button -->
+<button type="button" id="get-transcription">Get Transcription</button>
+
+<label for="transcription">Transcription</label>
+<textarea id="transcription" placeholder="This will auto-generate based on audio type" disabled></textarea>
+
+<!-- ✅ Button text will change based on Add/Edit mode -->
+<button type="submit" id="add-script-btn">Add Sequence</button>
+
+    </form>
+
+    <!-- Existing Scripts Table -->
+    <h2>Existing Sequences</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>SR. NO.</th>
+          <th>Announcement</th>
+          <th>Sequence</th>
+          <th>Transcription</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="scriptsTable"></tbody>
+    </table>
+  </main>
+
+  <script src="js/scriptmanager.js"></script>
+</body>
+</html>
+
+
+
+
+
+routes/announcementtype.routes.js - 
+import express from "express";
+import { 
+  getLanguages, 
+  getAnnouncementTypes, 
+  addAnnouncementType, 
+  deleteAnnouncementType 
+} from "../controllers/announcementtype.controller.js";
+
+const router = express.Router();
+
+// ✅ Serve the Announcement Type Page
+router.get("/", (req, res) => {
+  res.sendFile("public/announcementtype.html", { root: process.cwd() });
+});
+
+// ✅ Fetch languages from Upload Service (Now at `/languages`)
+router.get("/languages", getLanguages);
+
+// ✅ Fetch announcement types for a selected language
+router.get("/types", getAnnouncementTypes);
+
+// ✅ Add new announcement type
+router.post("/types", addAnnouncementType);
+
+// ✅ Delete announcement type (now requires language as a query param)
+router.delete("/types/:type", deleteAnnouncementType);
+
+export default router;
+
+
+
+
+routes/scriptmanager.route.js - 
+import express from "express";
+import { 
+  getTranscriptions, 
+  addScript, 
+  getScripts, 
+  deleteScript, 
+  updateScript, 
+  getScriptById // ✅ Add this function
+} from "../controllers/scriptmanager.controller.js";
+
+const router = express.Router();
+
+router.get("/transcriptions", getTranscriptions);
+router.post("/scripts", addScript);
+router.get("/scripts", getScripts);
+router.get("/scripts/:id", getScriptById); // ✅ Add route to fetch script by ID
+router.put("/scripts/:id", updateScript);
+router.delete("/scripts/:id", deleteScript);
+
+export default router;
+
+
+
+
+
+app.js - 
+import express from "express";
+import dotenv from "dotenv";
+import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
+import announcementTypeRoutes from "./routes/announcementtype.routes.js";
+import scriptManagerRoutes from "./routes/scriptmanager.routes.js";
+
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 4006;
+
+// Define __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// ✅ Enable CORS for All Routes
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "DELETE", "PUT", "OPTIONS"],
+  allowedHeaders: ["Content-Type"]
+}));
+
+// Middleware
+app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
+
+// ✅ API Routes
+app.use("/announcementtype", announcementTypeRoutes);
+app.use("/scriptmanager", scriptManagerRoutes);
+
+// ✅ Serve `announcementtype.html` when visiting `/announcementtype`
+app.get("/announcementtype", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "announcementtype.html"));
+});
+
+// ✅ Serve `scriptmanager.html` when visiting `/scriptmanager`
+app.get("/scriptmanager", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "scriptmanager.html"));
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`✅ Script Manager Service running on http://localhost:${PORT}`);
+});
+
+
+
+.env - 
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=Infosoft@123
+DB_NAME=afas
+
+
+
+
+
+seetings-service-
+db.config.js-
+import mysql from "mysql2/promise";
+import dotenv from "dotenv";
+dotenv.config();
+
+const db = mysql.createPool({
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASSWORD || "Infosoft@123",
+  database: process.env.DB_NAME || "afas",
+  namedPlaceholders: true,
+  rowsAsArray: false,
+  typeCast: function (field, next) {
+    if (field.type === "JSON") {
+      return field.string("utf8"); // ✅ Recommended encoding
+    }
+    return next();
+  },
+});
+
+
+export default db;
+
+
+
+
+
+settings.controller.js-
+import { getSettings, saveSettings } from "../models/settings.model.js";
+
+export const getConfig = async (req, res) => {
+  try {
+    const config = await getSettings();
+
+    if (!config) {
+      return res.status(200).json({
+        languages: { english: true, hindi: false, regional: false },
+        language_order: ["english", "hindi", "regional"],
+        frequency: 1,
+        audio_lag: 2,
+        advance_minutes: 15,
+      });
+    }
+
+    // ✅ config is already parsed in model
+    res.status(200).json(config);
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching settings", error: err.message });
+  }
+};
+
+export const updateConfig = async (req, res) => {
+  try {
+    const body = req.body;
+
+    if (!body.language_order || body.language_order.length === 0) {
+      return res.status(400).json({ message: "Language order is required." });
+    }
+
+    await saveSettings(body);
+    res.status(200).json({ message: "Settings saved successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Error saving settings", error: err.message });
+  }
+};
+
+
+
+
+
+settings.models.js-
+import db from "../config/db.config.js";
+
+export const getSettings = async () => {
+  const [rows] = await db.execute("SELECT * FROM settings LIMIT 1");
+
+  if (!rows.length) return null;
+
+  const row = rows[0];
+
+  // ✅ Only parse if it's a string (MySQL might already parse JSON as object)
+  const languages = typeof row.languages === "string"
+    ? JSON.parse(row.languages)
+    : row.languages;
+
+  const language_order = typeof row.language_order === "string"
+    ? JSON.parse(row.language_order)
+    : row.language_order;
+
+  return {
+    languages,
+    language_order,
+    frequency: row.frequency || 1,
+    audio_lag: row.audio_lag || 2,
+    advance_minutes: row.advance_minutes || 15,
+  };
+};
+
+export const saveSettings = async ({ languages, language_order, frequency, audio_lag, advance_minutes }) => {
+  const langJson = JSON.stringify(languages);
+  const orderJson = JSON.stringify(language_order);
+
+  console.log("💾 Saving to DB:", {
+    langJson,
+    orderJson,
+    frequency,
+    audio_lag,
+    advance_minutes,
+  });
+
+  await db.execute("DELETE FROM settings");
+  await db.execute(
+    `INSERT INTO settings (languages, language_order, frequency, audio_lag, advance_minutes)
+     VALUES (?, ?, ?, ?, ?)`,
+    [
+      langJson,
+      orderJson,
+      frequency || 1,
+      audio_lag || 2,
+      advance_minutes || 15,
+    ]
+  );
+};
+
+
+
+
+
+settings.js-
+const orderList = document.getElementById("language-order");
+
+function createLanguageItem(lang) {
+  const li = document.createElement("li");
+  li.textContent = lang;
+  li.draggable = true;
+
+  li.ondragstart = (e) => {
+    e.dataTransfer.setData("text/plain", e.target.textContent);
+  };
+
+  li.ondragover = (e) => e.preventDefault();
+
+  li.ondrop = (e) => {
+    e.preventDefault();
+    const dragged = e.dataTransfer.getData("text/plain");
+    const draggedItem = [...orderList.children].find(li => li.textContent === dragged);
+    if (draggedItem && draggedItem !== e.target) {
+      orderList.insertBefore(draggedItem, e.target);
+    }
+  };
+
+  orderList.appendChild(li);
+}
+
+async function loadSettings() {
+  try {
+    const res = await fetch("/settings");
+    if (!res.ok) throw new Error("Failed to fetch settings");
+
+    const data = await res.json();
+
+    const languages = data.languages || { english: true, hindi: false, regional: false };
+    const language_order = data.language_order?.length ? data.language_order : ["english", "hindi", "regional"];
+    const frequency = data.frequency || 1;
+    const audio_lag = data.audio_lag || 2;
+    const advance_minutes = data.advance_minutes || 15;
+
+    document.getElementById("english").checked = languages.english;
+    document.getElementById("hindi").checked = languages.hindi;
+    document.getElementById("regional").checked = languages.regional;
+
+    orderList.innerHTML = "";
+    language_order.forEach(createLanguageItem);
+
+    document.getElementById("frequency").value = frequency;
+    document.getElementById("audio-lag").value = audio_lag;
+    document.getElementById("advance-time").value = advance_minutes;
+
+  } catch (err) {
+    console.error("❌ Error loading settings:", err.message);
+    alert("Failed to load settings. Check server log.");
+  }
+}
+
+async function saveSettings() {
+  const languages = {
+    english: document.getElementById("english").checked,
+    hindi: document.getElementById("hindi").checked,
+    regional: document.getElementById("regional").checked,
+  };
+
+  const language_order = [...orderList.children].map(li => li.textContent);
+  const frequency = parseInt(document.getElementById("frequency").value);
+  const audio_lag = parseInt(document.getElementById("audio-lag").value);
+  const advance_minutes = parseInt(document.getElementById("advance-time").value);
+
+  try {
+    const res = await fetch("/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ languages, language_order, frequency, audio_lag, advance_minutes })
+    });
+
+    const result = await res.json();
+    alert(result.message);
+  } catch (err) {
+    console.error("❌ Error saving settings:", err.message);
+    alert("Error saving settings.");
+  }
+}
+
+document.getElementById("save-button").addEventListener("click", saveSettings);
+
+// Load on page load
+loadSettings();
+
+
+
+
+
+settings.html-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AFAS Settings</title>
+</head>
+<body>
+  <h2>AFAS Settings</h2>
+
+  <label><strong>Languages:</strong></label><br>
+  <input type="checkbox" id="english"> English
+  <input type="checkbox" id="hindi"> Hindi
+  <input type="checkbox" id="regional"> Regional
+  <br><br>
+
+  <label><strong>Language Order (drag to reorder):</strong></label>
+  <ul id="language-order" style="list-style:none; padding:0; border:1px solid #ccc; width:200px;"></ul>
+
+  <label><strong>Frequency (1–5):</strong></label>
+  <input type="number" id="frequency" min="1" max="5"><br><br>
+
+  <label><strong>Audio Lag (in seconds):</strong></label>
+  <select id="audio-lag">
+    <script>
+      document.write([...Array(10)].map((_, i) =>
+        `<option value="${i + 1}">${i + 1}</option>`
+      ).join(''));
+    </script>
+  </select><br><br>
+
+  <label><strong>Advance Announcement Time (minutes before ETD/ETA):</strong></label>
+  <input type="number" id="advance-time" min="1"><br><br>
+
+  <button id="save-button">Save Settings</button>
+
+  <script src="js/settings.js"></script>
+</body>
+</html>
+
+
+
+
+settings.route.js-
+import express from "express";
+import { getConfig, updateConfig } from "../controllers/settings.controller.js";
+
+const router = express.Router();
+router.get("/", getConfig);
+router.post("/", updateConfig);
+
+export default router;
+
+
+
+app.js-
+import express from "express";
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+import settingsRoutes from "./routes/settings.routes.js";
+
+dotenv.config();
+const app = express();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
+
+app.use("/settings", settingsRoutes);
+app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "settings.html")));
+
+const PORT = process.env.PORT || 4010;
+app.listen(PORT, () => console.log(`⚙️ Settings Service running on http://localhost:${PORT}`));
+
+
+upload-service-
+db.config.js-
+import mysql from "mysql2/promise";
+
+const db = await mysql.createPool({
+  host: "localhost",
+  user: "root",
+  password: "Infosoft@123",  
+  database: "afas",
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+});
+
+export default db;
+
+
+upload.controller.js-
+import fs from "fs";
+import path from "path";
+import db from "../config/db.config.js";
+
+// Upload and Save Audio Data
+// ✅ Upload and Save Audio Data
+export const uploadAudio = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    const { audioType, transcription, remarks, language } = req.body;
+    const file = req.file;
+
+    // ✅ Create a proper upload directory
+    const uploadDir = path.join("uploads", language, audioType.replace(/\s/g, "").toLowerCase());
+    fs.mkdirSync(uploadDir, { recursive: true });
+
+    // ✅ Move file to directory
+    const filePath = path.join(uploadDir, file.originalname);
+    fs.renameSync(file.path, filePath);
+
+    // ✅ Save to database
+    const [result] = await db.execute(
+      "INSERT INTO audios (language, audioType, filePath, transcription, remarks) VALUES (?, ?, ?, ?, ?)",
+      [language, audioType, filePath.replace("uploads", ""), transcription, remarks]
+    );
+
+    res.status(201).json({ id: result.insertId, message: "Audio uploaded successfully" });
+  } catch (err) {
+    console.error("❌ Upload error:", err.message);
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+
+// Get All Audios by Language
+export const getAllAudios = async (req, res) => {
+  const { language } = req.query;
+
+  if (!language) {
+    console.error("🚨 Missing language parameter in request.");
+    return res.status(400).json({ message: "Language parameter is required." });
+  }
+
+  try {
+    console.log(`🔍 Fetching audios for language: ${language}`);
+
+    const [audios] = await db.execute("SELECT * FROM audios WHERE language = ?", [language]);
+
+    if (!audios || audios.length === 0) {
+      console.warn(`⚠ No audios found for language: ${language}`);
+      return res.json([]); // ✅ Return an empty array instead of an error
+    }
+
+    console.log("✅ Audios fetched successfully:", audios);
+    res.json(audios);
+  } catch (err) {
+    console.error("❌ Database error while fetching audios:", err.message);
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+
+// Delete Audio
+export const deleteAudio = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Fetch the audio record
+    const [audioRecords] = await db.execute("SELECT * FROM audios WHERE id = ?", [id]);
+
+    if (audioRecords.length === 0) {
+      return res.status(404).json({ message: "Audio not found" });
+    }
+
+    const audio = audioRecords[0];
+
+    // Delete the file from the filesystem
+    const filePath = path.join("uploads", audio.filePath);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    // Delete the record from the database
+    await db.execute("DELETE FROM audios WHERE id = ?", [id]);
+
+    res.status(204).send();
+  } catch (err) {
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+};
+
+
+public/css/styles.css-
+/* General Reset */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: Arial, sans-serif;
+  background-color: #f4f4f4;
+}
+
+/* Top Bar Styling */
+.top-bar {
+  width: 100%;
+  height: 60px;
+  background-color: #333;
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+  position: fixed;
+  top: 0;
+  z-index: 1000;
+}
+
+.top-bar h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.top-bar button {
+  padding: 10px 20px;
+  background-color: #f00;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.top-bar button:hover {
+  background-color: #c00;
+}
+
+/* Side Navigation Bar Styling */
+.side-nav {
+  width: 220px;
+  height: 100%;
+  background-color: #444;
+  color: white;
+  position: fixed;
+  top: 60px;
+  left: 0;
+  overflow-y: auto;
+}
+
+.side-nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.side-nav ul li a {
+  display: block;
+  padding: 15px 20px;
+  color: white;
+  text-decoration: none;
+}
+
+.side-nav ul li a:hover,
+.side-nav ul li a.active {
+  background-color: #666;
+}
+
+/* Main Content Styling */
+.main-content {
+  margin-left: 240px;
+  padding: 20px;
+  padding-top: 80px;
+}
+
+/* Language Tabs Styling */
+.language-tabs {
+  margin-bottom: 20px;
+}
+
+.language-tab {
+  padding: 10px 20px;
+  margin-right: 10px;
+  background-color: #ddd;
+  border: 1px solid #ccc;
+  cursor: pointer;
+}
+
+.language-tab.active {
+  background-color: #333;
+  color: white;
+}
+
+/* Form Styling */
+form label {
+  display: block;
+  margin-top: 10px;
+  font-weight: bold;
+}
+
+form input, form select, form textarea {
+  width: 100%;
+  padding: 10px;
+  margin: 10px 0;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
+
+form button {
+  padding: 10px 20px;
+  background-color: #333;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+form button:hover {
+  background-color: #555;
+}
+
+/* Table Styling */
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table th, table td {
+  border: 1px solid #ddd;
+  padding: 10px;
+  text-align: left;
+}
+
+table th {
+  background-color: #333;
+  color: white;
+}
+
+public/js/upload.js-
+
+document.getElementById("upload-form").addEventListener("submit", async (e) => {
+  e.preventDefault(); // ✅ Prevent page reload
+
+  const language = getSelectedLanguage();
+  const audioType = document.getElementById("audioType").value;
+  const fileInput = document.getElementById("audioFile");
+  const transcription = document.getElementById("transcription").value.trim();
+  const remarks = document.getElementById("remarks").value.trim();
+
+  if (!fileInput.files.length) {
+    alert("⚠️ Please select an audio file to upload.");
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("audio", fileInput.files[0]); // ✅ Append audio file
+  formData.append("language", language);
+  formData.append("audioType", audioType);
+  formData.append("transcription", transcription);
+  formData.append("remarks", remarks);
+
+  try {
+    console.log("🔄 Uploading audio...");
+    const response = await fetch("/upload", {
+      method: "POST",
+      body: formData, // ✅ Send FormData instead of JSON
+    });
+
+    if (!response.ok) {
+      throw new Error(`Upload failed. Status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log("✅ Upload successful:", result);
+    alert("✅ Audio uploaded successfully!");
+    
+    // Refresh the audio table after upload
+    loadAudios();
+  } catch (err) {
+    console.error("❌ Error uploading audio:", err.message);
+    alert("❌ Failed to upload audio.");
+  }
+});
+
+document.querySelectorAll(".language-tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelector(".language-tab.active").classList.remove("active");
+    tab.classList.add("active");
+    loadAudios(); // Reload audio list when language changes
+  });
+});
+
+function getSelectedLanguage() {
+  return document.querySelector(".language-tab.active")?.getAttribute("data-lang") || "english"; // Default to English
+}
+
+// 🛠 Fetch languages dynamically from `/languages` API instead of hardcoding them
+async function loadLanguages() {
+  try {
+    const response = await fetch("/languages");
+    if (!response.ok) throw new Error("Failed to fetch languages.");
+
+    const languages = await response.json();
+    console.log("✅ Available Languages:", languages);
+
+    const tabsContainer = document.querySelector(".language-tabs");
+    tabsContainer.innerHTML = ""; // Clear existing tabs
+
+    languages.forEach((lang) => {
+      const button = document.createElement("button");
+      button.className = "language-tab";
+      button.setAttribute("data-lang", lang);
+      button.textContent = lang.charAt(0).toUpperCase() + lang.slice(1); // Capitalize first letter
+
+      button.addEventListener("click", () => {
+        document.querySelector(".language-tab.active")?.classList.remove("active");
+        button.classList.add("active");
+        loadAudios(); // Reload audio list when language changes
+      });
+
+      tabsContainer.appendChild(button);
+    });
+
+    // Set the first language as active by default
+    if (tabsContainer.firstChild) {
+      tabsContainer.firstChild.classList.add("active");
+      loadAudios();
+    }
+  } catch (err) {
+    console.error("❌ Error loading languages:", err.message);
+  }
+}
+
+// 🛠 Load uploaded audio files for the selected language
+async function loadAudios() {
+  const language = getSelectedLanguage();
+  console.log(`🔄 Fetching audios for language: ${language}`);
+
+  try {
+    const response = await fetch(`/upload?language=${language}`);
+    if (!response.ok) throw new Error(`Failed to fetch audios. Status: ${response.status}`);
+
+    const audios = await response.json();
+    console.log("✅ Fetched audios:", audios);
+
+    const tableBody = document.getElementById("audio-table");
+    tableBody.innerHTML = "";
+
+    if (!Array.isArray(audios)) {
+      console.warn("⚠ API response is not an array:", audios);
+      return;
+    }
+
+    audios.forEach((audio, index) => {
+      const row = `<tr>
+        <td>${index + 1}</td>
+        <td><a href="/uploads/${audio.filePath}" target="_blank">${audio.filePath.split("/").pop()}</a></td>
+        <td>${audio.transcription || "N/A"}</td>
+        <td>${audio.remarks || "N/A"}</td>
+        <td><button onclick="deleteAudio('${audio.id}')">Delete</button></td>
+      </tr>`;
+      tableBody.innerHTML += row;
+    });
+  } catch (err) {
+    console.error("❌ Error loading audios:", err.message);
+  }
+}
+
+
+// 🛠 Delete an audio file
+async function deleteAudio(id) {
+  try {
+    const response = await fetch(`/upload/${id}`, { method: "DELETE" });
+    if (response.ok) {
+      console.log(`✅ Audio ${id} deleted successfully.`);
+      loadAudios(); // Refresh the list
+    } else {
+      alert("Error deleting audio.");
+    }
+  } catch (err) {
+    console.error("❌ Error deleting audio:", err.message);
+  }
+}
+
+// 🔄 Load languages and initialize UI
+window.onload = () => {
+  console.log("🔄 Page loaded. Fetching available languages...");
+  loadLanguages();
+};
+
+
+upload.html-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Upload Audio</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <!-- Top Bar -->
+  <header class="top-bar">
+    <h1>Welcome to AFAS</h1>
+    <button id="logout-button">Logout</button>
+  </header>
+
+  <!-- Side Navigation Bar -->
+  <nav class="side-nav">
+    <ul>
+      <li><a href="/dashboard">Dashboard</a></li>
+      <li><a href="/audio-type">Audio Type</a></li>
+      <li><a href="/upload" class="active">Upload Audio</a></li>
+      <li><a href="/announcement-type">Announcement Type</a></li>
+      <li><a href="/sequence">Sequence</a></li>
+      <li><a href="/scheduler">Scheduler</a></li>
+      <li><a href="/zones">Zones</a></li>
+      <li><a href="/zone-selector">Zone Selector</a></li>
+      <li><a href="/users">Users</a></li>
+      <li><a href="/permissions">Permissions</a></li>
+    </ul>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <h2>Upload Audio</h2>
+
+    <!-- Language Tabs -->
+    <div class="language-tabs">
+      <button class="language-tab active" data-lang="english">English</button>
+      <button class="language-tab" data-lang="hindi">Hindi</button>
+      <button class="language-tab" data-lang="regional">Regional</button>
+    </div>
+
+    <!-- Upload Form -->
+    <form id="upload-form" enctype="multipart/form-data">
+      <label for="audioType">Audio Type *</label>
+      <select id="audioType" required>
+        <option value="specialmessage">Special Message</option>
+        <option value="std">Standard</option>
+        <option value="number">Number</option>
+        <option value="city">City</option>
+        <option value="airline">Airline</option>
+      </select>
+
+      <label for="audioFile">Upload Audio *</label>
+      <input type="file" id="audioFile" accept=".mp3,.wav" required>
+
+      <label for="transcription">Transcription *</label>
+      <textarea id="transcription" required></textarea>
+
+      <label for="remarks">Remarks</label>
+      <input type="text" id="remarks">
+
+      <button type="submit">Submit</button>
+    </form>
+
+    <!-- Uploaded Audios Table -->
+    <h2>Uploaded Audios</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>SR. NO.</th>
+          <th>Audio</th>
+          <th>Transcription</th>
+          <th>Remarks</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="audio-table"></tbody>
+    </table>
+
+    <!-- Pagination -->
+    <div class="pagination">
+      <button id="prev-page" disabled>&lt; Prev</button>
+      <span id="page-info">Page 1</span>
+      <button id="next-page">Next &gt;</button>
+    </div>
+  </main>
+
+  <script src="js/upload.js"></script>
+</body>
+</html>
+
+
+upload.routes.js-
+import express from "express";
+import multer from "multer";
+import { uploadAudio, getAllAudios, deleteAudio } from "../controllers/upload.controller.js";
+
+const router = express.Router();
+
+// ✅ Configure Multer Storage
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, "uploads/temp/"); // Temporary storage before renaming
+    },
+    filename: (req, file, cb) => {
+      cb(null, file.originalname); // Keep original filename
+    },
+  });
+const upload = multer({ dest: "uploads/temp" });
+
+router.post("/", upload.single("audio"), uploadAudio);
+router.get("/", getAllAudios); // ✅ Ensure this gets `?language=` correctly
+router.delete("/:id", deleteAudio);
+
+export default router;
+
+
+.env-
+PORT=4003
+
+app.js-
+import express from "express";
+import fs from "fs";
+import path from "path";
+import uploadRoutes from "./routes/upload.routes.js";
+
+const app = express();
+const __dirname = path.resolve();
+
+// Serve static files (CSS, JS, HTML) from the "public" directory
+app.use(express.static(path.join(__dirname, "public")));
+
+// Serve the "uploads" directory for uploaded files
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// API routes for upload
+app.use("/upload", uploadRoutes);
+
+// Serve upload.html at root
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "upload.html"));
+});
+
+// 🔍 Fetch available languages
+app.get("/languages", (req, res) => {
+  const uploadDir = path.join(__dirname, "uploads");
+
+  try {
+    if (!fs.existsSync(uploadDir)) {
+      console.warn("⚠ Uploads directory does not exist.");
+      return res.json([]);
+    }
+
+    const languages = fs.readdirSync(uploadDir).filter((item) =>
+      fs.statSync(path.join(uploadDir, item)).isDirectory()
+    );
+
+    console.log("✅ Available languages:", languages);
+    res.json(languages);
+  } catch (err) {
+    console.error("❌ Error fetching languages:", err.message);
+    res.status(500).json({ message: "Error fetching languages", error: err.message });
+  }
+});
+
+// 🎵 List audio files for a given language + type
+app.get("/audio-files", (req, res) => {
+  const { language, type } = req.query;
+
+  if (!language || !type) {
+    console.error("🚨 Missing required parameters: language or type");
+    return res.status(400).json({ message: "Language and type are required." });
+  }
+
+  const audioDir = path.join(__dirname, "uploads", language, type);
+  console.log(`🔍 Checking directory: ${audioDir}`);
+
+  try {
+    if (!fs.existsSync(audioDir)) {
+      console.warn(`⚠ Directory does not exist: ${audioDir}`);
+      return res.json([]);
+    }
+
+    const files = fs.readdirSync(audioDir).filter((file) =>
+      fs.statSync(path.join(audioDir, file)).isFile()
+    );
+
+    console.log("✅ Audio files found:", files);
+    res.json(files);
+  } catch (err) {
+    console.error("❌ Error fetching audio files:", err.message);
+    res.status(500).json({ message: "Error fetching audio files", error: err.message });
+  }
+});
+
+// ✅ New route: Serve individual audio files dynamically
+app.get("/audio-file", (req, res) => {
+  const { category, filename, language } = req.query;
+
+  if (!category || !filename || !language) {
+    return res.status(400).json({ message: "Missing query parameters." });
+  }
+
+  const filePath = path.join(__dirname, "uploads", language, category, filename);
+  console.log("🔍 Serving file:", filePath);
+
+  if (!fs.existsSync(filePath)) {
+    console.warn("❌ File not found:", filePath);
+    return res.status(404).send("File not found");
+  }
+
+  res.sendFile(filePath);
+});
+
+// Expose audio folders to be browsed directly
+app.use("/audio/english", express.static(path.join(__dirname, "uploads", "english")));
+
+// Start server
+const PORT = process.env.PORT || 4003;
+app.listen(PORT, () => {
+  console.log(`✅ Upload Service running on http://localhost:${PORT}`);
+});
+
+
+
+
+zone-service-
+db.config.js-
+import mysql from "mysql2/promise";
+import dotenv from "dotenv";
+dotenv.config();
+
+const pool = mysql.createPool({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASS,
+  database: process.env.DB_NAME,
+  waitForConnections: true,
+  connectionLimit: 10,
+});
+
+export default pool;
+
+zone.controller.js-
+import {
+  getAllZones,
+  getAnnouncementTypes,
+  addZoneMapping,
+  deleteZoneMapping,
+  getDistinctZones
+} from "../models/zone.model.js";
+import db from "../config/db.config.js";
+
+export const getZones = async (req, res) => {
+  const [rows] = await getAllZones();
+  res.json(rows);
+};
+
+export const getTypes = async (req, res) => {
+  const [rows] = await getAnnouncementTypes();
+  res.json(rows);
+};
+
+export const getZonesList = async (req, res) => {
+  const [rows] = await getDistinctZones();
+  res.json(rows);
+};
+
+export const addMapping = async (req, res) => {
+  const { zone, announcement_type } = req.body;
+  const [types] = await getAnnouncementTypes();
+  const type = types.find(t => t.type === announcement_type);
+  if (!type) return res.status(400).json({ message: "Invalid type" });
+  await addZoneMapping(type.id, zone);
+  res.status(201).json({ message: "Mapping added" });
+};
+
+export const deleteMapping = async (req, res) => {
+  const { id } = req.params;
+  await deleteZoneMapping(id);
+  res.status(204).send();
+};
+
+zone.model.js-
+import db from "../config/db.config.js";
+
+export const getAllZones = () =>
+  db.execute(`
+    SELECT az.id, at.type AS announcement_type, az.zone_name AS zone
+    FROM announcement_zones az
+    JOIN announcement_types at ON az.announcement_type_id = at.id
+  `);
+
+export const getAnnouncementTypes = () =>
+  db.execute(`SELECT id, type FROM announcement_types`);
+
+export const getDistinctZones = () =>
+  db.execute(`SELECT DISTINCT zone_name AS zone FROM announcement_zones`);
+
+export const addZoneMapping = (announcement_type_id, zone_name) =>
+  db.execute("INSERT INTO announcement_zones (announcement_type_id, zone_name) VALUES (?, ?)", [announcement_type_id, zone_name]);
+
+export const deleteZoneMapping = (id) =>
+  db.execute("DELETE FROM announcement_zones WHERE id = ?", [id]);
+
+public/css/zones.css-
+body {
+    background-color: #111;
+    color: #eee;
+    font-family: 'Segoe UI', sans-serif;
+    margin: 0;
+    padding: 0;
+  }
+  
+  .container {
+    padding: 20px;
+    max-width: 1000px;
+    margin: auto;
+  }
+  
+  h2 {
+    text-align: center;
+    color: #fff;
+    margin-bottom: 30px;
+  }
+  
+  select, button, input {
+    padding: 8px 12px;
+    font-size: 14px;
+    margin: 5px;
+    border-radius: 5px;
+    border: none;
+  }
+  
+  select {
+    background-color: #222;
+    color: #eee;
+  }
+  
+  button {
+    background-color: #444;
+    color: #fff;
+    cursor: pointer;
+  }
+  
+  button:hover {
+    background-color: #555;
+  }
+  
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: #222;
+    color: #eee;
+    margin-top: 20px;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  
+  table th, table td {
+    padding: 10px;
+    border: 1px solid #333;
+    text-align: center;
+  }
+  
+  table th {
+    background-color: #333;
+    font-weight: bold;
+  }
+  
+  .action-btn {
+    background: none;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    font-size: 16px;
+    margin: 0 5px;
+  }
+  
+  .action-btn:hover {
+    color: #ff0;
+  }
+  
+  input[type="search"] {
+    background-color: #222;
+    color: #fff;
+    border: 1px solid #444;
+    margin-left: 10px;
+    padding: 6px;
+  }
+  
+  .page-buttons {
+    text-align: right;
+    margin-top: 10px;
+  }
+  
+  .page-buttons button {
+    margin-left: 5px;
+  }
+  
+
+  public/js/zones.js-
+  async function fetchAnnouncementTypes() {
+  const res = await fetch('/api/zones/types');
+  const types = await res.json();
+  const dropdown = document.getElementById('announcementDropdown');
+  dropdown.innerHTML = types.map(t => `<option value="${t.type}">${t.type}</option>`).join('');
+}
+
+async function loadTable() {
+  const res = await fetch('/api/zones/mappings');
+  const mappings = await res.json();
+  const tableBody = document.getElementById('zoneTableBody');
+  const searchValue = document.getElementById('searchBox').value.toLowerCase();
+
+  const filtered = mappings.filter(item =>
+    item.announcement_type.toLowerCase().includes(searchValue) ||
+    item.zone.toLowerCase().includes(searchValue)
+  );
+
+  tableBody.innerHTML = filtered.map((item, idx) => `
+    <tr>
+      <td>${idx + 1}</td>
+      <td>${item.announcement_type}</td>
+      <td>${item.zone}</td>
+      <td><button onclick="deleteMapping(${item.id})">🗑</button></td>
+    </tr>
+  `).join('');
+}
+
+async function addZoneMapping() {
+  const zone = document.getElementById('zoneInput').value.trim();
+  const type = document.getElementById('announcementDropdown').value;
+
+  if (!zone || !type) {
+    alert("Both Zone and Announcement Type are required!");
+    return;
+  }
+
+  await fetch('/api/zones/mappings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ zone, announcement_type: type })
+  });
+
+  document.getElementById('zoneInput').value = '';
+  await loadTable();
+}
+
+async function deleteMapping(id) {
+  if (confirm("Are you sure you want to delete this mapping?")) {
+    await fetch(`/api/zones/mappings/${id}`, { method: 'DELETE' });
+    await loadTable();
+  }
+}
+
+window.onload = async () => {
+  await fetchAnnouncementTypes();
+  await loadTable();
+
+  document.getElementById('searchBox').addEventListener('input', loadTable);
+};
+
+public/zones.html-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Zone → Announcement Mapping</title>
+  <link rel="stylesheet" href="css/zones.css" />
+</head>
+<body>
+  <div class="sidebar">
+    <ul>
+      <li>Dashboard</li>
+      <li>Audio Type</li>
+      <li>Upload Audio</li>
+      <li>Announcement - Type</li>
+      <li>Sequence</li>
+      <li>Schedular</li>
+      <li>Zones</li>
+      <li class="active">Zone selector</li>
+      <li>Users</li>
+      <li>Permissions</li>
+    </ul>
+  </div>
+
+  <div class="main-content">
+    <h2>Zone → Announcement Mapping</h2>
+
+    <label for="zoneInput">Enter Zone:</label>
+    <input type="text" id="zoneInput" placeholder="e.g. Zone A" />
+
+    <label for="announcementDropdown">Select Announcement Type:</label>
+    <select id="announcementDropdown"></select>
+
+    <button onclick="addZoneMapping()">➕ Add Mapping</button>
+
+    <input type="text" id="searchBox" placeholder="Search" />
+
+    <table>
+      <thead>
+        <tr>
+          <th>SR.NO</th>
+          <th>Announcement Type</th>
+          <th>Zone</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="zoneTableBody"></tbody>
+    </table>
+  </div>
+
+  <script src="js/zones.js"></script>
+</body>
+</html>
+
+
+zones.routes.js-
+import express from "express";
+import {
+  getZones,
+  getTypes,
+  addMapping,
+  deleteMapping,
+  getZonesList
+} from "../controllers/zone.controller.js";
+
+const router = express.Router();
+
+router.get("/mappings", getZones);
+router.get("/types", getTypes);
+router.get("/zones", getZonesList);
+router.post("/mappings", addMapping);
+router.delete("/mappings/:id", deleteMapping);
+
+export default router;
+
+.env-
+DB_HOST=localhost
+DB_USER=root
+DB_PASS=Infosoft@123
+DB_NAME=afas
+DB_PORT=3306
+PORT=4013
+
+app.js-
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import path from "path";
+import zoneRoutes from "./routes/zone.routes.js";
+
+dotenv.config();
+const app = express();
+const PORT = process.env.PORT || 4013;
+
+app.use(cors());
+app.use(express.json());
+app.use("/api/zones", zoneRoutes);
+
+const __dirname = path.resolve();
+app.use(express.static(path.join(__dirname, "public")));
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "zones.html"));
+});
+
+app.listen(PORT, () => {
+  console.log(`✅ Zone Service running on http://localhost:${PORT}`);
+});

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Scheduler | AFAS</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="top-bar">
+    <h1>AFAS Scheduler</h1>
+    <button onclick="logout()">Logout</button>
+  </header>
+
+  <nav class="side-nav">
+    <a href="/dashboard">Dashboard</a>
+    <a href="/audio-type">Audio Type</a>
+    <a href="/upload">Upload Audio</a>
+    <a href="/announcement-type">Announcement Type</a>
+    <a href="/sequence">Sequence</a>
+    <a href="/scheduler" class="active">Scheduler</a>
+    <a href="/zones">Zones</a>
+    <a href="/settings">Settings</a>
+  </nav>
+
+  <main class="main-content">
+    <h2>Schedule a Special Message</h2>
+
+    <form id="scheduler-form">
+      <label for="name">Schedule Name:</label>
+      <input type="text" id="name" required />
+
+      <label for="language">Language:</label>
+      <select id="language" required></select>
+
+      <label for="audio">Audio File:</label>
+      <select id="audio" required></select>
+
+      <label>Timing(s):</label>
+      <div id="timing-container">
+        <input type="time" class="timing-field" required />
+        <button type="button" id="add-timing">Add Time</button>
+      </div>
+
+      <label for="start-date">Start Date:</label>
+      <input type="date" id="start-date" required />
+
+      <label for="end-date">End Date:</label>
+      <input type="date" id="end-date" required />
+
+      <label for="frequency">Frequency (Days):</label>
+      <select id="frequency" multiple>
+        <option value="Mon">Monday</option>
+        <option value="Tue">Tuesday</option>
+        <option value="Wed">Wednesday</option>
+        <option value="Thu">Thursday</option>
+        <option value="Fri">Friday</option>
+        <option value="Sat">Saturday</option>
+        <option value="Sun">Sunday</option>
+        <option value="all">All</option>
+      </select>
+
+      <button type="submit">Save Schedule</button>
+    </form>
+
+    <h2>Scheduled Messages</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Name</th>
+          <th>Audio</th>
+          <th>Timings</th>
+          <th>Date Range</th>
+          <th>Frequency</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="schedule-table"></tbody>
+    </table>
+  </main>
+
+  <script src="../js/base.js"></script>
+  <script src="../js/scheduler.js"></script>
+</body>
+</html>

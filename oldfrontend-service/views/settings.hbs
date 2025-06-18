@@ -1,0 +1,26 @@
+<h2>Configure Announcement Settings</h2>
+
+<label>Languages:</label><br>
+<input type="checkbox" id="english"> English
+<input type="checkbox" id="hindi"> Hindi
+<input type="checkbox" id="regional"> Regional
+
+<br><br>
+<label>Language Order (drag to reorder):</label>
+<ul id="language-order" style="list-style:none; padding:0; border:1px solid #ccc; width:200px;"></ul>
+
+<label>Frequency (1–5):</label>
+<input type="number" id="frequency" min="1" max="5" />
+
+<label>Audio Lag (seconds):</label>
+<select id="audio-lag">
+  {{#each (range 1 10)}}<option value="{{this}}">{{this}}</option>{{/each}}
+</select>
+
+<label>Advance Time (minutes before ETD/ETA):</label>
+<input type="number" id="advance-time" min="1" />
+
+<br>
+<button id="save-button">Save</button>
+
+<script src="../public/js/settings.js"></script>

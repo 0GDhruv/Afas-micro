@@ -1,0 +1,414 @@
+afas.db.config - 
+import mysql from "mysql2/promise";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const afasDb = mysql.createPool({
+    host: process.env.AFS_DB_HOST || "localhost",  // ✅ AFAS Database
+    user: process.env.AFS_DB_USER || "afas_user",
+    password: process.env.AFS_DB_PASS || "Infosoft@123",
+    database: process.env.AFS_DB_NAME || "afas",
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+});
+
+export default afasDb;
+
+
+fids.db.config - 
+
+import mysql from "mysql2/promise";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const fidsDb = mysql.createPool({
+    host: process.env.FIDS_DB_HOST || "192.168.10.241",// ✅ FIDS Server (Ubuntu)
+    user: process.env.FIDS_DB_USER || "afas_user",
+    password: process.env.FIDS_DB_PASS || "Infosoft@123",
+    database: process.env.FIDS_DB_NAME || "fids",
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+});
+
+export default fidsDb;
+
+
+
+
+
+fids.controller.js- 
+
+import fidsDb from "../config/fids_db.config.js"; // FIDS Database
+import afasDb from "../config/afas_db.config.js"; // AFAS Database
+import { getAnnouncementSequence } from "../services/announcement.service.js";
+
+// ✅ Polling function for checking FIDS updates
+export const pollFIDSData = async () => {
+  try {
+    console.log("🔄 Polling FIDS database for flight updates...");
+
+    // ✅ Fetch all distinct flight statuses from FIDS (AFT Table)
+    const [rows] = await fidsDb.execute(
+      `SELECT DISTINCT t1.*, t2.CityName, t3.AirlineName 
+       FROM aft AS t1
+       JOIN citymaster AS t2 ON t1.CityIATACode = t2.IATACityCode
+       JOIN airlinemaster AS t3 ON t1.IATAAirlineCode = t3.IATAAirlineCode`
+    );
+
+    if (rows.length === 0) {
+      console.log("✅ No new announcements needed.");
+      return;
+    }
+
+    // ✅ Fetch all announcement types from AFAS (Fixing the DB issue)
+    const [announcementTypes] = await afasDb.execute(
+      `SELECT type, area FROM announcement_types`
+    );
+
+    // ✅ Convert announcement types into a lookup object
+    const announcementMap = {};
+    announcementTypes.forEach(({ type, area }) => {
+      announcementMap[type] = area;
+    });
+
+    for (const flight of rows) {
+      console.log(`✈ Processing Flight: ${flight.FlightCode}, Status: ${flight.Status}, ArrDepFlag: ${flight.ArrDepFlag}, Gate: ${flight.GateBelt}`);
+
+      // ✅ Determine area type (Arrival or Departure) using ArrDepFlag
+      const area = flight.ArrDepFlag === 1 ? "Arrival" : "Departure";
+      console.log("DHRUV PLEASE CHECK AREA Before mapping i.e :",area);
+      
+      console.log(`🚨 Before mapping: Flight ${flight.FlightCode}, Status: ${flight.Status}, ArrDepFlag: ${flight.ArrDepFlag}`);
+
+
+      // ✅ Determine correct announcement type based on status & area
+      const announcementType = mapFlightStatusToAnnouncement(flight.Status, flight.ArrDepFlag, announcementMap);
+      if (!announcementType) {
+        console.log(`⚠ No announcement mapping found for status: ${flight.Status}`);
+        continue;
+      }
+      console.log(`🔍 Checking for announcement: Type: ${announcementType}, Area: ${area}`);
+
+      // ✅ Fetch predefined announcement sequence from Script Manager
+      const sequence = await getAnnouncementSequence(announcementType, area);
+      if (!sequence) {
+        console.log(`⚠ No sequence found for announcement type: ${announcementType} in area: ${area}`);
+        continue;
+      }
+
+      // ✅ Convert FlightDate to MySQL DATE format
+      const flightDateIST = new Date((flight.FlightDate + 19800) * 1000); // ✅ Convert Unix timestamp to IST (UTC+5:30)
+const flightDate = flightDateIST.toISOString().split("T")[0]; // ✅ Extract YYYY-MM-DD
+
+
+
+
+      // ✅ Check if flight already exists in playlist (Now checking arr_dep_flag)
+      const [existing] = await afasDb.execute(
+        `SELECT id, status, flight_date, row_update_date FROM playlist 
+         WHERE flight_code = ? AND arr_dep_flag = ? LIMIT 1`,
+        [flight.FlightCode, flight.ArrDepFlag] // 🔹 Ensures correct Arrival vs Departure lookup
+      );
+
+      const newStatus = mapPlaylistStatus(flight.Status);
+      const playlistEntry = {
+        flight_code: flight.FlightCode,
+        flight_number: flight.FlightNumber,
+        gate_number: flight.GateBelt || null,
+        announcement_type: announcementType,
+        sequence,
+        status: newStatus,
+        created_at: new Date().toISOString(),
+        city_name: flight.CityName,
+        airline_name: flight.AirlineName,
+        language: "english",
+        flight_date: flightDate,
+        row_update_date: flight.RowUpdateDate,
+        arr_dep_flag: flight.ArrDepFlag,
+        std: flight.STASTD || null,
+        etd: flight.ETAETD || null
+      };
+
+      if (existing.length > 0) {
+        if (existing[0].row_update_date < flight.RowUpdateDate) {
+          console.log(`🔄 Updating playlist entry for Flight ${flight.FlightCode} with status: ${newStatus}`);
+          await afasDb.execute(
+            `UPDATE playlist SET 
+              gate_number = ?, 
+              announcement_type = ?, 
+              sequence = ?, 
+              status = ?, 
+              city_name = ?, 
+              airline_name = ?, 
+              flight_date = ?,
+              row_update_date = ?,
+              arr_dep_flag = ?,
+              std = ?,
+              etd = ?
+            WHERE flight_code = ? AND arr_dep_flag = ?`,
+            [
+              playlistEntry.gate_number,
+              playlistEntry.announcement_type,
+              JSON.stringify(playlistEntry.sequence),
+              playlistEntry.status,
+              playlistEntry.city_name,
+              playlistEntry.airline_name,
+              playlistEntry.flight_date,
+              playlistEntry.row_update_date,
+              playlistEntry.arr_dep_flag,
+              playlistEntry.std,
+              playlistEntry.etd,
+              playlistEntry.flight_code,
+              playlistEntry.arr_dep_flag
+            ]
+          );
+        }
+      } else {
+        console.log(`📢 Adding new announcement for Flight ${flight.FlightCode} with status: ${newStatus}`);
+        await afasDb.execute(
+          `INSERT INTO playlist (flight_code, flight_number, gate_number, announcement_type, sequence, status, city_name, airline_name, flight_date, row_update_date, arr_dep_flag, std, etd) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+
+          [
+            playlistEntry.flight_code,
+            playlistEntry.flight_number,
+            playlistEntry.gate_number,
+            playlistEntry.announcement_type,
+            JSON.stringify(playlistEntry.sequence),
+            playlistEntry.status,
+            playlistEntry.city_name,
+            playlistEntry.airline_name,
+            playlistEntry.flight_date,
+            playlistEntry.row_update_date,
+            playlistEntry.arr_dep_flag,
+            playlistEntry.std,
+            playlistEntry.etd
+          ]
+        );
+      }
+    }
+  } catch (error) {
+    console.error("❌ Error polling FIDS data:", error.message);
+  }
+};
+
+// ✅ Map flight statuses to predefined announcement types
+// ✅ Map flight statuses to predefined announcement types
+const mapFlightStatusToAnnouncement = (status, arrDepFlag, announcementMap) => {
+  let area = arrDepFlag === 1 ? "Arrival" : "Departure"; // Ensure correct area
+  const lowerStatus = status.trim().toLowerCase(); // Normalize status case
+
+  console.log(`🛠 Checking mapping for status: '${status}' (normalized: '${lowerStatus}') in area: '${area}' (ArrDepFlag=${arrDepFlag})`);
+
+  // 🔥 **Fix: Ensure "Arrived" is always treated as "Arrival"**
+  if (lowerStatus === "arrived") {
+    console.log(`🚨 Overriding area for 'Arrived' flights -> Setting area to 'Arrival'`);
+    area = "Arrival";  // ✅ Ensure arrived flights always get assigned to "Arrival"
+  }
+
+  const statusMap = {
+    "scheduled": { "Arrival": "Scheduled", "Departure": "Scheduled" },
+    "arrived": { "Arrival": "Arrived" },
+    "departed": { "Departure": "Departed" },
+    "diverted": { "Arrival": "Diverted", "Departure": "Diverted" },
+    "boarding": { "Departure": "Boarding" },
+    "check in": { "Departure": "Check IN" },
+    "final boarding": { "Departure": "Final Boarding Call" },
+    "cancelled": { "Arrival": "Cancelled", "Departure": "Cancelled" },
+    "rescheduled": { "Arrival": "Rescheduled", "Departure": "Rescheduled" },
+    "gate closed": { "Departure": "Gate Closed" },
+    "on time": { "Arrival": "On Time", "Departure": "On Time" },
+    "delayed": { "Arrival": "Delayed", "Departure": "Delayed" }
+  };
+
+  const mappedType = statusMap[lowerStatus]?.[area];
+
+  console.log(`🔹 Status Map Lookup: '${lowerStatus}' in area '${area}' => '${mappedType}'`);
+
+  if (!mappedType) {
+    console.log(`❌ No valid mapping found for status: '${status}'`);
+    return null;
+  }
+
+  if (!announcementMap[mappedType]) {
+    console.log(`❌ Announcement type '${mappedType}' does not exist in database!`);
+    return null;
+  }
+
+  console.log(`✅ Final Mapping: Status '${status}' -> Announcement Type '${mappedType}' in '${area}'`);
+  return mappedType;
+};
+
+
+
+
+
+// ✅ Map playlist status correctly
+const mapPlaylistStatus = (fidsStatus) => {
+  const statusMap = {
+    "Scheduled": "Scheduled",
+    "Arrived": "Arrived",
+    "Departed": "Completed",
+    "Diverted": "Diverted",
+    "Boarding": "Boarding",
+    "Check IN": "In Progress",
+    "Final Boarding": "In Progress",
+    "Cancelled": "Cancelled",
+    "Rescheduled": "Scheduled",
+    "Gate Closed": "Closed",
+    "On Time": "Scheduled",
+    "Postponed": "Postponed",
+    "Preponed": "Scheduled",
+    "Indefinite": "Delayed",
+    "Additional": "Scheduled",
+    "Expected": "Scheduled",
+    "Delayed": "Delayed",
+    "Security": "Security"
+  };
+
+  const cleanStatus = fidsStatus.trim();
+  return statusMap[cleanStatus] || "Scheduled"; // Default to Scheduled if unknown
+};
+
+
+
+
+fids.routes.js - 
+import express from "express";
+import { pollFIDSData } from "../controllers/fids.controller.js";
+
+const router = express.Router();
+
+// ✅ Manually trigger FIDS polling (for debugging)
+router.get("/poll", async (req, res) => {
+  await pollFIDSData();
+  res.json({ message: "FIDS polling triggered manually." });
+});
+
+export default router;
+
+
+
+
+announcement.services.js - 
+import axios from "axios";
+import dotenv from "dotenv";
+import fidsDb from "../config/fids_db.config.js"; // FIDS Database
+import afasDb from "../config/afas_db.config.js"; // AFAS Database
+dotenv.config();
+
+// ✅ Get the announcement sequence from Script Manager Service
+export const getAnnouncementSequence = async (announcementType, area) => {
+  try {
+      console.log(`🔍 Fetching script for: ${announcementType} in ${area}`);
+      
+      const [rows] = await afasDb.execute(
+          `SELECT sequence FROM scripts WHERE announcement_type = ? AND area = ? LIMIT 1`,
+          [announcementType, area]
+      );
+
+      if (rows.length === 0) {
+          console.log(`⚠ No script found for ${announcementType} in ${area}`);
+          return null;
+      }
+
+      let sequenceData = rows[0].sequence;
+
+      // ✅ Check if the sequence is already valid JSON
+      if (typeof sequenceData === "string") {
+          if (!sequenceData.startsWith("[") || !sequenceData.endsWith("]")) {
+              console.warn(`⚠ Sequence is not a valid JSON array, treating it as a string: ${sequenceData}`);
+              return [sequenceData]; // Return as an array
+          }
+
+          try {
+              return JSON.parse(sequenceData); // Try parsing JSON
+          } catch (jsonError) {
+              console.error(`❌ Error parsing sequence JSON:`, jsonError);
+              return null;
+          }
+      }
+
+      return sequenceData; // Return directly if already JSON
+  } catch (error) {
+      console.error(`❌ Error fetching sequence:`, error);
+      return null;
+  }
+};
+
+
+// ✅ Send the processed announcement to the Playlist Service
+export const sendToPlaylist = async (announcementData) => {
+  try {
+    console.log(`📢 Sending to playlist:`, announcementData);
+    
+    const response = await axios.post(`${process.env.PLAYLIST_SERVICE_URL}/playlist`, announcementData);
+
+    console.log(`✅ Playlist API Response:`, response.data);
+    return response.data;
+    
+  } catch (error) {
+    console.error(`❌ Error sending to playlist:`, error.message);
+    console.error(`❌ Full Error:`, error.response?.data || error);
+    return null;
+  }
+};
+
+
+
+.env - 
+# ✅ FIDS Database (Ubuntu Server)
+FIDS_DB_HOST=192.168.10.241
+FIDS_DB_USER=afas_user
+FIDS_DB_PASS=Infosoft@123
+FIDS_DB_NAME=fids
+
+# ✅ AFAS Database (Local)
+AFAS_DB_HOST=localhost
+AFAS_DB_USER=root
+AFAS_DB_PASS=Infosoft@123
+AFAS_DB_NAME=afas_db
+
+# ✅ Services
+SCRIPT_MANAGER_SERVICE_URL=http://localhost:4006
+PLAYLIST_SERVICE_URL=http://localhost:4005
+
+
+
+app.js - 
+import express from "express";
+import dotenv from "dotenv";
+import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
+import fidsRoutes from "./routes/fids.routes.js";
+import { pollFIDSData } from "./controllers/fids.controller.js";
+
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 4007;
+
+// Define __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
+
+// API Routes
+app.use("/fids", fidsRoutes);
+
+// Start polling every 10 seconds
+setInterval(pollFIDSData, 10000);
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`✅ FIDS Integration Service running on http://localhost:${PORT}`);
+});

@@ -1,0 +1,35 @@
+<h2>Upload Audio</h2>
+<div class="lang-tabs">
+  <button class="tab" data-lang="english">English</button>
+  <button class="tab" data-lang="hindi">Hindi</button>
+  <button class="tab" data-lang="regional">Regional</button>
+</div>
+
+<form id="uploadForm">
+  <label>Audio Type *</label>
+  <select id="audioType"></select>
+
+  <label>Upload Audio *</label>
+  <input type="file" id="audioFile" accept=".mp3,.wav" />
+
+  <label>Transcription *</label>
+  <input type="text" id="transcription" />
+
+  <label>Remarks</label>
+  <input type="text" id="remarks" />
+
+  <button type="submit">Submit</button>
+</form>
+
+<table>
+  <thead>
+    <tr>
+      <th>SR.NO</th>
+      <th>Audio</th>
+      <th>Transcription</th>
+      <th>Remarks</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody id="uploadTable"></tbody>
+</table>

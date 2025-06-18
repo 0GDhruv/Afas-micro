@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Announcement Type | AFAS</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="top-bar">
+    <h1>AFAS | Announcement Type</h1>
+    <button onclick="logout()">Logout</button>
+  </header>
+
+  <nav class="side-nav">
+    <a href="/dashboard">Dashboard</a>
+    <a href="/audio-type">Audio Type</a>
+    <a href="/upload">Upload Audio</a>
+    <a href="/announcement-type" class="active">Announcement Type</a>
+    <a href="/sequence">Sequence</a>
+    <a href="/scheduler">Scheduler</a>
+    <a href="/zones">Zones</a>
+    <a href="/settings">Settings</a>
+  </nav>
+
+  <main class="main-content">
+    <h2>Announcement Types</h2>
+
+    <label for="area">Select Area *</label>
+    <select id="area">
+      <option value="Arrival">Arrival</option>
+      <option value="Departure">Departure</option>
+      <option value="Common">Common</option>
+    </select>
+
+    <div class="language-tabs"></div>
+
+    <form id="announcementtype-form">
+      <label for="newType">New Announcement Type *</label>
+      <input type="text" id="newType" placeholder="Enter announcement type" required />
+      <button type="submit">Add Type</button>
+    </form>
+
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Language</th>
+          <th>Area</th>
+          <th>Type</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="typesTable"></tbody>
+    </table>
+  </main>
+
+  <script src="../js/base.js"></script>
+  <script src="../js/announcementtype.js"></script>
+</body>
+</html>

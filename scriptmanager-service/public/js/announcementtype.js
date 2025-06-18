@@ -36,17 +36,24 @@ async function loadLanguages() {
   }
 }
 
-// ✅ Fetch announcement types only after the user selects a language
+// ✅ Fetch announcement types after selecting a language and area
 async function loadAnnouncementTypes(language) {
   if (!language) {
     console.warn("🚨 No language selected. Skipping API call.");
     return;
   }
 
-  console.log(`🔗 Fetching announcement types for: ${language}`);
+  // ✅ Get selected area from dropdown
+  const area = document.getElementById("area")?.value;
+  if (!area) {
+    console.warn("🚨 No area selected. Skipping API call.");
+    return;
+  }
+
+  console.log(`🔗 Fetching announcement types for: ${language}, Area: ${area}`);
 
   try {
-    const response = await fetch(`/announcementtype/types?language=${encodeURIComponent(language)}`);
+    const response = await fetch(`/announcementtype/types?language=${encodeURIComponent(language)}&area=${encodeURIComponent(area)}`);
     if (!response.ok) throw new Error(`Failed to fetch announcement types. Status: ${response.status}`);
 
     const types = await response.json();
@@ -59,8 +66,9 @@ async function loadAnnouncementTypes(language) {
       const row = `<tr>
         <td>${index + 1}</td>
         <td>${language}</td>
+        <td>${area}</td>
         <td>${type}</td>
-        <td><button onclick="deleteType('${type}', '${language}')">🗑 Delete</button></td>
+        <td><button onclick="deleteType('${type}', '${language}', '${area}')">🗑 Delete</button></td>
       </tr>`;
       typeTable.innerHTML += row;
     });
@@ -75,10 +83,11 @@ async function addAnnouncementType(e) {
   e.preventDefault();
 
   const language = document.querySelector(".language-tab.active")?.getAttribute("data-lang");
+  const area = document.getElementById("area").value;
   const newType = document.getElementById("newType").value.trim();
 
-  if (!language || !newType) {
-    alert("⚠️ Please select a language and enter an announcement type.");
+  if (!language || !newType || !area) {
+    alert("⚠️ Please select all fields.");
     return;
   }
 
@@ -86,14 +95,12 @@ async function addAnnouncementType(e) {
     const response = await fetch("/announcementtype/types", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ language, type: newType }),
+      body: JSON.stringify({ language, type: newType, area }),
     });
 
     if (response.ok) {
       alert("✅ Announcement Type added successfully!");
       loadAnnouncementTypes(language);
-    } else {
-      alert("❌ Failed to add Announcement Type.");
     }
   } catch (err) {
     console.error("❌ Error adding Announcement Type:", err.message);
@@ -101,11 +108,11 @@ async function addAnnouncementType(e) {
 }
 
 // ✅ Delete an announcement type
-async function deleteType(type, language) {
+async function deleteType(type, language, area) {
   if (!confirm(`⚠️ Are you sure you want to delete '${type}'?`)) return;
 
   try {
-    const response = await fetch(`/announcementtype/types/${encodeURIComponent(type)}?language=${encodeURIComponent(language)}`, { method: "DELETE" });
+    const response = await fetch(`/announcementtype/types/${encodeURIComponent(type)}?language=${encodeURIComponent(language)}&area=${encodeURIComponent(area)}`, { method: "DELETE" });
 
     if (response.ok) {
       alert("✅ Announcement Type deleted successfully!");

@@ -1,0 +1,42 @@
+<h2>Script Manager</h2>
+
+<label for="area">Select Area *</label>
+<select id="area">
+  <option value="Arrival">Arrival</option>
+  <option value="Departure">Departure</option>
+  <option value="Common">Common</option>
+</select>
+
+<div class="language-tabs"></div>
+
+<form id="scriptmanager-form">
+  <input type="hidden" id="script-id">
+
+  <label for="announcementType">Announcement Type *</label>
+  <select id="announcementType" required></select>
+
+  <label for="sequence">Sequence *</label>
+  <input type="text" id="sequence" required>
+
+  <button type="button" id="get-transcription">Get Transcription</button>
+
+  <label for="transcription">Transcription</label>
+  <textarea id="transcription" disabled></textarea>
+
+  <button type="submit" id="add-script-btn">Add Sequence</button>
+</form>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Type</th>
+      <th>Sequence</th>
+      <th>Transcription</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody id="scriptsTable"></tbody>
+</table>
+
+<script src="../public/js/scriptmanager.js"></script>

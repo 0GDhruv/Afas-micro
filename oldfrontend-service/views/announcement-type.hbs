@@ -1,0 +1,31 @@
+<h2>Announcement Types</h2>
+
+<label for="area">Select Area *</label>
+<select id="area">
+  <option value="Arrival">Arrival</option>
+  <option value="Departure">Departure</option>
+  <option value="Common">Common</option>
+</select>
+
+<div class="language-tabs"></div>
+
+<form id="announcementtype-form">
+  <label for="newType">Add New Announcement Type</label>
+  <input type="text" id="newType" placeholder="e.g. Final Call" required>
+  <button type="submit">Add</button>
+</form>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Language</th>
+      <th>Area</th>
+      <th>Type</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody id="typesTable"></tbody>
+</table>
+
+<script src="../public/js/announcementtype.js"></script>

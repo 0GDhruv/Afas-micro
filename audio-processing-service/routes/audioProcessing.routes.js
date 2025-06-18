@@ -1,9 +1,10 @@
 import express from "express";
-import { processAnnouncement } from "../controllers/audioProcessing.controller.js";
+import { processAnnouncement, markFlightAsAnnounced, getActiveAnnouncements } from "../controllers/audioProcessing.controller.js";
 
 const router = express.Router();
 
-// ✅ Process and Generate Announcement for a Flight
 router.get("/generate/:flight_number", processAnnouncement);
+router.post("/mark-announced", markFlightAsAnnounced);
+router.get("/active", getActiveAnnouncements);
 
 export default router;
