@@ -5,7 +5,7 @@ import axios from "axios";
 export const getLanguages = async (req, res) => {
   try {
     console.log("📢 Fetching languages from Upload Service...");
-    const response = await axios.get("http://localhost:4003/languages"); // ✅ Correct API Call
+    const response = await axios.get("http://localhost:4003/languages");
     console.log("✅ Languages Fetched:", response.data);
     res.json(response.data);
   } catch (err) {
@@ -16,10 +16,11 @@ export const getLanguages = async (req, res) => {
 
 // ✅ Fetch announcement types for a selected language
 export const getAnnouncementTypes = async (req, res) => {
+  const response = await axios.get("http://localhost:4003/languages");
+  
   const { language } = req.query;
-
   if (!language) {
-    console.error("🚨 No language provided in request! Expected: ?language=English");
+    console.error("🚨 No language provided in request! Expected format: /announcementtype?language=English");
     return res.status(400).json({ message: "Language parameter is required." });
   }
 
@@ -49,7 +50,6 @@ export const addAnnouncementType = async (req, res) => {
   try {
     console.log(`➕ Adding new announcement type: ${type} for language: ${language}`);
     
-    // ✅ Check if announcement type already exists for this language
     const [existing] = await db.execute(
       "SELECT type FROM announcement_types WHERE language = ? AND type = ?",
       [language, type]
@@ -59,7 +59,6 @@ export const addAnnouncementType = async (req, res) => {
       return res.status(409).json({ message: "❌ Announcement type already exists!" });
     }
 
-    // ✅ Insert new announcement type
     await db.execute(
       "INSERT INTO announcement_types (language, type) VALUES (?, ?)",
       [language, type]

@@ -33,26 +33,30 @@
     <h2>Sequence</h2>
 
     <!-- Language Tabs -->
-    <div class="language-tabs">
-      <button class="language-tab active" data-lang="english">English</button>
-      <button class="language-tab" data-lang="hindi">Hindi</button>
-      <button class="language-tab" data-lang="regional">Regional</button>
-    </div>
+    <div class="language-tabs"></div>
 
     <!-- Form for Adding a Script -->
     <form id="scriptmanager-form">
-      <label for="announcementType">Announcement Type *</label>
-      <select id="announcementType" required>
-        <option value="" disabled selected>Select Announcement Type</option>
-      </select>
+      <!-- Hidden field for script ID (used for editing) -->
+<input type="hidden" id="script-id">
 
-      <label for="sequence">Sequence *</label>
-      <input type="text" id="sequence" placeholder="Enter sequence (comma-separated)" required>
+<label for="announcementType">Announcement Type *</label>
+<select id="announcementType" required>
+  <option value="" disabled selected>Select Announcement Type</option>
+</select>
 
-      <label for="transcription">Transcription</label>
-      <textarea id="transcription" placeholder="This will auto-generate based on audio type" disabled></textarea>
+<label for="sequence">Sequence *</label>
+<input type="text" id="sequence" placeholder="Enter sequence (comma-separated)" required>
 
-      <button type="submit">Add Sequence</button>
+<!-- ✅ "Get Transcription" Button -->
+<button type="button" id="get-transcription">Get Transcription</button>
+
+<label for="transcription">Transcription</label>
+<textarea id="transcription" placeholder="This will auto-generate based on audio type" disabled></textarea>
+
+<!-- ✅ Button text will change based on Add/Edit mode -->
+<button type="submit" id="add-script-btn">Add Sequence</button>
+
     </form>
 
     <!-- Existing Scripts Table -->

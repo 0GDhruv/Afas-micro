@@ -8,16 +8,21 @@ import {
 
 const router = express.Router();
 
-// ✅ Fetch languages from Upload Service
+// ✅ Serve the Announcement Type Page
+router.get("/", (req, res) => {
+  res.sendFile("public/announcementtype.html", { root: process.cwd() });
+});
+
+// ✅ Fetch languages from Upload Service (Now at `/languages`)
 router.get("/languages", getLanguages);
 
 // ✅ Fetch announcement types for a selected language
-router.get("/", getAnnouncementTypes);
+router.get("/types", getAnnouncementTypes);
 
 // ✅ Add new announcement type
-router.post("/", addAnnouncementType);
+router.post("/types", addAnnouncementType);
 
 // ✅ Delete announcement type (now requires language as a query param)
-router.delete("/:type", deleteAnnouncementType);
+router.delete("/types/:type", deleteAnnouncementType);
 
 export default router;

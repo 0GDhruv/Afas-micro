@@ -74,4 +74,33 @@ export const getActiveAnnouncements = async (req, res) => {
     }
   };
   
+  export const addToPlaylist = async (req, res) => {
+    const { flight_number, gate_number, announcement_type, sequence, status, timestamp } = req.body;
+  
+    if (!flight_number || !announcement_type || !sequence || !status) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+  
+    try {
+      // ✅ Convert ISO Timestamp to MySQL format (YYYY-MM-DD HH:MM:SS)
+      const mysqlTimestamp = new Date(timestamp).toISOString().slice(0, 19).replace("T", " ");
+  
+      await db.execute(
+        `INSERT INTO playlist (flight_number, gate_number, announcement_type, sequence, status, created_at) 
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE 
+         gate_number = VALUES(gate_number), 
+         announcement_type = VALUES(announcement_type), 
+         sequence = VALUES(sequence), 
+         status = VALUES(status), 
+         created_at = VALUES(created_at)`,
+        [flight_number, gate_number || null, announcement_type, JSON.stringify(sequence), status, mysqlTimestamp]
+      );
+  
+      res.status(201).json({ message: "Announcement added to playlist successfully." });
+    } catch (error) {
+      console.error("❌ Error adding to playlist:", error.message);
+      res.status(500).json({ message: "Database error", error: error.message });
+    }
+  };
   

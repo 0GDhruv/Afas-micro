@@ -1,3 +1,48 @@
+
+document.getElementById("upload-form").addEventListener("submit", async (e) => {
+  e.preventDefault(); // ✅ Prevent page reload
+
+  const language = getSelectedLanguage();
+  const audioType = document.getElementById("audioType").value;
+  const fileInput = document.getElementById("audioFile");
+  const transcription = document.getElementById("transcription").value.trim();
+  const remarks = document.getElementById("remarks").value.trim();
+
+  if (!fileInput.files.length) {
+    alert("⚠️ Please select an audio file to upload.");
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("audio", fileInput.files[0]); // ✅ Append audio file
+  formData.append("language", language);
+  formData.append("audioType", audioType);
+  formData.append("transcription", transcription);
+  formData.append("remarks", remarks);
+
+  try {
+    console.log("🔄 Uploading audio...");
+    const response = await fetch("/upload", {
+      method: "POST",
+      body: formData, // ✅ Send FormData instead of JSON
+    });
+
+    if (!response.ok) {
+      throw new Error(`Upload failed. Status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log("✅ Upload successful:", result);
+    alert("✅ Audio uploaded successfully!");
+    
+    // Refresh the audio table after upload
+    loadAudios();
+  } catch (err) {
+    console.error("❌ Error uploading audio:", err.message);
+    alert("❌ Failed to upload audio.");
+  }
+});
+
 document.querySelectorAll(".language-tab").forEach((tab) => {
   tab.addEventListener("click", () => {
     document.querySelector(".language-tab.active").classList.remove("active");

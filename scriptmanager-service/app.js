@@ -17,7 +17,7 @@ const __dirname = path.dirname(__filename);
 
 // ✅ Enable CORS for All Routes
 app.use(cors({
-  origin: "*",  // Allow requests from any origin
+  origin: "*",
   methods: ["GET", "POST", "DELETE", "PUT", "OPTIONS"],
   allowedHeaders: ["Content-Type"]
 }));
@@ -26,15 +26,16 @@ app.use(cors({
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// API Routes
+// ✅ API Routes
 app.use("/announcementtype", announcementTypeRoutes);
 app.use("/scriptmanager", scriptManagerRoutes);
 
-// Serve Static Pages
+// ✅ Serve `announcementtype.html` when visiting `/announcementtype`
 app.get("/announcementtype", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "announcementtype.html"));
 });
 
+// ✅ Serve `scriptmanager.html` when visiting `/scriptmanager`
 app.get("/scriptmanager", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "scriptmanager.html"));
 });

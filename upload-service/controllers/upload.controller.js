@@ -3,24 +3,25 @@ import path from "path";
 import db from "../config/db.config.js";
 
 // Upload and Save Audio Data
+// ✅ Upload and Save Audio Data
 export const uploadAudio = async (req, res) => {
-  const { audioType, transcription, remarks, language } = req.body;
-  const file = req.file;
-
-  if (!file) {
-    return res.status(400).json({ message: "No file uploaded" });
-  }
-
-  // Determine upload directory
-  const uploadDir = path.join("uploads", language, audioType.replace(/\s/g, "").toLowerCase());
-  fs.mkdirSync(uploadDir, { recursive: true });
-
-  // Move file to directory
-  const filePath = path.join(uploadDir, file.originalname);
-  fs.renameSync(file.path, filePath);
-
   try {
-    // Save audio details to database
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    const { audioType, transcription, remarks, language } = req.body;
+    const file = req.file;
+
+    // ✅ Create a proper upload directory
+    const uploadDir = path.join("uploads", language, audioType.replace(/\s/g, "").toLowerCase());
+    fs.mkdirSync(uploadDir, { recursive: true });
+
+    // ✅ Move file to directory
+    const filePath = path.join(uploadDir, file.originalname);
+    fs.renameSync(file.path, filePath);
+
+    // ✅ Save to database
     const [result] = await db.execute(
       "INSERT INTO audios (language, audioType, filePath, transcription, remarks) VALUES (?, ?, ?, ?, ?)",
       [language, audioType, filePath.replace("uploads", ""), transcription, remarks]
@@ -28,11 +29,12 @@ export const uploadAudio = async (req, res) => {
 
     res.status(201).json({ id: result.insertId, message: "Audio uploaded successfully" });
   } catch (err) {
+    console.error("❌ Upload error:", err.message);
     res.status(500).json({ message: "Database error", error: err.message });
   }
 };
 
-// Get All Audios by Language
+
 // Get All Audios by Language
 export const getAllAudios = async (req, res) => {
   const { language } = req.query;
